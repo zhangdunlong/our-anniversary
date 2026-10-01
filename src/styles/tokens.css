@@ -1,0 +1,123 @@
+/* ==========================================================================
+   tokens.css —— 设计令牌层（Design Tokens）
+   --------------------------------------------------------------------------
+   全站唯一的颜色 / 圆角 / 动效参数来源。任何模块都不允许写死颜色值，
+   一律引用这里的变量。这样做带来三个直接收益：
+     1. 换主题 = 改 <html data-theme>，一行属性带动整页换肤；
+     2. 想整体调色，只改这一个文件，不需要全站搜索替换；
+     3. JavaScript 里也能读（见 share-poster.js 的 readVar），
+        海报配色自动跟随页面主题。
+   ========================================================================== */
+
+:root {
+  /* ---- 字体 ---- */
+  --font-sans: 'PingFang SC', 'HarmonyOS Sans SC', 'Microsoft YaHei',
+               'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --font-serif: Georgia, 'Times New Roman', 'Songti SC', serif;
+
+  /* ---- 圆角 ---- */
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* ---- 间距 ---- */
+  --space-xs: 6px;
+  --space-sm: 10px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 36px;
+
+  /* ---- 动效 ---- */
+  --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 0.18s;
+  --dur: 0.35s;
+  --dur-slow: 0.6s;
+
+  /* ---- 层级 ---- */
+  --z-bg: 0;
+  --z-fx: 1;
+  --z-content: 2;
+  --z-control: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+}
+
+/* ==========================================================================
+   主题一：星夜（默认，保留原始深色玫瑰视觉）
+   ========================================================================== */
+:root,
+[data-theme='night'] {
+  color-scheme: dark;
+
+  --primary: #ff6b6b;
+  --primary-light: #ff8e8e;
+  --primary-dark: #cc2a2a;
+  --accent: #ffb3c8;
+
+  --bg-0: #1a0008;
+  --bg-1: #2d0a18;
+  --bg-2: #1a0a28;
+
+  --text: #ffffff;
+  --text-strong: rgba(255, 235, 235, 0.96);
+  --text-soft: rgba(255, 220, 220, 0.85);
+  --text-muted: rgba(255, 180, 180, 0.62);
+  --text-faint: rgba(255, 180, 180, 0.38);
+
+  --glass-bg: rgba(255, 255, 255, 0.045);
+  --glass-bg-hover: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 100, 100, 0.14);
+  --glass-border-strong: rgba(255, 100, 100, 0.3);
+  --glass-blur: 14px;
+
+  --shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.22);
+  --shadow: 0 10px 34px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 30px rgba(255, 107, 107, 0.35);
+
+  /* 星空点颜色（供 starfield.js 读取） */
+  --star-rgb: 255, 200, 220;
+  --star-opacity: 1;
+
+  /* 页面背景渐变（gradientBg 动画使用） */
+  --bg-gradient: linear-gradient(135deg, #1a0008 0%, #2d0a18 25%, #1a0a28 50%, #2d0a18 75%, #1a0008 100%);
+}
+
+/* ==========================================================================
+   主题二：晨光（新增，浅色 ACG 磨砂，白天 / 长辈 / 打印友好）
+   ========================================================================== */
+[data-theme='dawn'] {
+  color-scheme: light;
+
+  --primary: #ff5fa2;
+  --primary-light: #ff9ec4;
+  --primary-dark: #d63a7d;
+  --accent: #1aa6c4;
+
+  --bg-0: #fff5f7;
+  --bg-1: #ffe9f1;
+  --bg-2: #f6f0ff;
+
+  --text: #3a2f52;
+  --text-strong: #2c2340;
+  --text-soft: #574a70;
+  --text-muted: #8b7fa5;
+  --text-faint: #b3a9c4;
+
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-bg-hover: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 150, 190, 0.35);
+  --glass-border-strong: rgba(255, 120, 170, 0.5);
+  --glass-blur: 16px;
+
+  --shadow-sm: 0 4px 14px rgba(214, 58, 125, 0.1);
+  --shadow: 0 10px 30px rgba(214, 58, 125, 0.14);
+  --shadow-glow: 0 0 26px rgba(255, 95, 162, 0.28);
+
+  --star-rgb: 214, 58, 125;
+  --star-opacity: 0.55;
+
+  --bg-gradient: linear-gradient(135deg, #fff5f7 0%, #ffe9f1 25%, #f6f0ff 50%, #ffe9f1 75%, #fff5f7 100%);
+}

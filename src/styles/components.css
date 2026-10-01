@@ -1,0 +1,997 @@
+/* ==========================================================================
+   components.css —— 组件层：每一个可复用的 UI 部件
+   ========================================================================== */
+
+/* ==========================================================================
+   1. 通用毛玻璃面板
+   ========================================================================== */
+.glass {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-sm);
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+/* ==========================================================================
+   2. 右上角控制区（主题切换 + 音乐播放器）
+   ========================================================================== */
+.controls {
+  position: fixed;
+  top: 20px; right: 20px;
+  z-index: var(--z-control);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ctrl-group { position: relative; }
+
+.ctrl-btn {
+  position: relative;
+  width: 48px; height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  font-size: 1.25em;
+  line-height: 1;
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+
+.ctrl-btn:hover,
+.ctrl-btn:focus-visible {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+  transform: scale(1.1);
+}
+
+.ctrl-btn[hidden] { display: none; }
+
+.ctrl-btn--music.playing { animation: float 3s ease-in-out infinite; }
+
+/* 播放进度环 —— 用 conic-gradient 画在外圈，不额外占位 */
+.ctrl-btn--music::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(var(--primary) calc(var(--progress, 0) * 1%), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+  pointer-events: none;
+}
+.ctrl-btn--music.playing::before { opacity: 1; }
+
+.ctrl-btn .ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 107, 107, 0.35);
+  animation: ripple-wave 2s ease-out infinite;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---- 展开面板 ---- */
+.ctrl-panel {
+  position: absolute;
+  top: 56px; right: 0;
+  width: 232px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-6px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease),
+              visibility var(--dur);
+}
+
+@media (hover: hover) {
+  .ctrl-group:hover .ctrl-panel,
+  .ctrl-group:focus-within .ctrl-panel {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+}
+
+.ctrl-group.is-expanded .ctrl-panel {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.ctrl-panel-title {
+  font-size: 0.78em;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ctrl-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ctrl-panel-time {
+  font-size: 0.7em;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 统一的滑块样式（进度 / 音量共用） */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--glass-border-strong);
+  cursor: pointer;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-0);
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.5);
+  cursor: pointer;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--primary);
+  border: 2px solid var(--bg-0);
+  cursor: pointer;
+}
+
+#music-volume { width: 66px; flex: none; }
+
+/* 触屏设备的展开小箭头 */
+.ctrl-expand {
+  display: none;
+  position: absolute;
+  bottom: -3px; left: -3px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 10px;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (hover: none) {
+  .ctrl-expand { display: block; }
+}
+
+/* ==========================================================================
+   3. 页头
+   ========================================================================== */
+.header h1 {
+  font-size: 2.6em;
+  font-weight: 200;
+  letter-spacing: 6px;
+  background: linear-gradient(135deg,
+    var(--primary), var(--primary-light), var(--accent), var(--primary));
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: gradient-bg 4s ease infinite, heart-beat 2s ease-in-out infinite;
+  margin-bottom: 10px;
+}
+
+.header .subtitle {
+  font-size: 1em;
+  color: var(--text-muted);
+  letter-spacing: 3px;
+  font-weight: 300;
+}
+
+.header .subtitle span {
+  display: inline-block;
+  animation: pulse 3s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   4. 相爱计时器
+   ========================================================================== */
+.time-counter {
+  text-align: center;
+  margin-bottom: var(--space-xl);
+  animation: fade-in-up 1.3s var(--ease) both;
+}
+
+.time-counter .names {
+  font-size: 1.15em;
+  color: var(--text-soft);
+  margin-bottom: 10px;
+  font-weight: 300;
+  letter-spacing: 2px;
+}
+
+.time-counter .names .heart-symbol {
+  display: inline-block;
+  animation: heart-beat 1.6s ease-in-out infinite;
+}
+
+.time-counter .label {
+  font-size: 0.95em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+  letter-spacing: 2px;
+}
+
+.time-counter .big-days {
+  font-size: 1.15em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  letter-spacing: 1px;
+}
+
+.time-counter .big-days strong {
+  font-size: 2.2em;
+  color: var(--primary);
+  font-weight: 200;
+  vertical-align: middle;
+  text-shadow: var(--shadow-glow);
+  font-variant-numeric: tabular-nums;
+}
+
+.days-display {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 18px 36px;
+  margin: 6px 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.digit-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.digit-value {
+  font-size: 2.8em;
+  font-weight: 200;
+  color: var(--primary);
+  line-height: 1;
+  text-shadow: var(--shadow-glow);
+  font-variant-numeric: tabular-nums;
+}
+
+.digit-label {
+  font-size: 0.65em;
+  color: var(--text-muted);
+  margin-top: 3px;
+  letter-spacing: 1px;
+}
+
+.days-display .separator {
+  font-size: 2.2em;
+  color: var(--text-faint);
+  align-self: flex-start;
+  padding-top: 4px;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   5. 情书
+   ========================================================================== */
+.letter {
+  position: relative;
+  overflow: hidden;
+  padding: 44px 40px;
+}
+
+.letter::before,
+.letter::after {
+  content: '"';
+  position: absolute;
+  font-family: var(--font-serif);
+  font-size: 10em;
+  line-height: 1;
+  color: var(--glass-border);
+  pointer-events: none;
+  user-select: none;
+}
+.letter::before { top: -14px; left: 16px; }
+.letter::after {
+  bottom: -60px; right: 16px;
+  transform: rotate(180deg);
+}
+
+.letter .line {
+  position: relative;
+  z-index: 1;
+  line-height: 2;
+  font-size: 1.05em;
+  color: var(--text-soft);
+  font-weight: 300;
+  letter-spacing: 0.8px;
+}
+
+.letter .line::before {
+  content: '❤';
+  display: inline-block;
+  color: var(--glass-border-strong);
+  margin-right: 8px;
+  font-size: 0.7em;
+  vertical-align: middle;
+}
+
+.letter .signature {
+  position: relative;
+  z-index: 1;
+  text-align: right;
+  margin-top: 24px;
+  font-style: italic;
+  color: var(--primary-light);
+  letter-spacing: 1px;
+}
+
+/* ==========================================================================
+   6. 记忆卡片
+   ========================================================================== */
+.gallery .card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 28px 20px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: var(--text);
+  cursor: default;
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+
+.gallery .card:hover {
+  background: var(--glass-bg-hover);
+  transform: translateY(-4px);
+  border-color: var(--glass-border-strong);
+}
+
+.gallery .card .icon {
+  font-size: 2.4em;
+  margin-bottom: 12px;
+  animation: float 3s ease-in-out infinite;
+}
+
+.gallery .card:nth-child(2) .icon { animation-delay: 0.5s; }
+.gallery .card:nth-child(3) .icon { animation-delay: 1s; }
+.gallery .card:nth-child(4) .icon { animation-delay: 1.5s; }
+
+.gallery .card .title {
+  font-size: 0.95em;
+  color: var(--text-soft);
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+
+.gallery .card .desc {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 6px;
+  font-weight: 300;
+}
+
+.gallery .card--clickable { cursor: pointer; }
+
+.gallery .card-detail {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  line-height: 1.7;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height var(--dur) var(--ease), opacity var(--dur) var(--ease),
+              margin-top var(--dur) var(--ease);
+}
+
+.gallery .card.is-open .card-detail {
+  max-height: 220px;
+  opacity: 1;
+  margin-top: 8px;
+}
+
+/* ==========================================================================
+   7. 纪念日卡片
+   ========================================================================== */
+.anniv-list { display: flex; flex-direction: column; gap: 10px; }
+
+.anniv {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform var(--dur) var(--ease), background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease);
+}
+
+.anniv:hover {
+  background: var(--glass-bg-hover);
+  transform: translateX(4px);
+  border-color: var(--glass-border-strong);
+}
+
+.anniv-icon { font-size: 1.5em; line-height: 1; flex: none; }
+
+.anniv-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.anniv-name {
+  font-size: 0.95em;
+  color: var(--text-strong);
+  letter-spacing: 0.5px;
+}
+
+.anniv-date {
+  font-size: 0.72em;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.anniv-days {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.anniv-days-num {
+  font-size: 1.5em;
+  font-weight: 300;
+  color: var(--primary);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.anniv-days-label {
+  font-size: 0.66em;
+  color: var(--text-faint);
+  letter-spacing: 1px;
+}
+
+.anniv.is-highlight {
+  border-color: var(--glass-border-strong);
+  background: var(--glass-bg-hover);
+}
+
+.anniv.is-today {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow);
+  animation: pulse 2.2s ease-in-out infinite;
+}
+
+.anniv.is-today .anniv-days-num { font-size: 1.1em; }
+
+.anniv.is-passed { opacity: 0.5; }
+
+/* ==========================================================================
+   8. 恋爱时间轴
+   ========================================================================== */
+.timeline {
+  list-style: none;
+  position: relative;
+  padding-left: 34px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 13px; top: 10px; bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: linear-gradient(180deg,
+    transparent, var(--glass-border-strong) 8%, var(--glass-border-strong) 92%, transparent);
+}
+
+.tl-item {
+  position: relative;
+  margin-bottom: var(--space-md);
+}
+
+.tl-dot {
+  position: absolute;
+  left: -34px; top: 12px;
+  width: 28px; height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.85em;
+  background: var(--bg-1);
+  border: 2px solid var(--glass-border-strong);
+  z-index: 1;
+}
+
+.tl-item--start .tl-dot {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.tl-item--future .tl-dot {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.tl-card {
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.tl-card:hover {
+  transform: translateX(4px);
+  border-color: var(--glass-border-strong);
+}
+
+.tl-date {
+  display: block;
+  font-size: 0.7em;
+  letter-spacing: 1.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-title {
+  font-size: 1em;
+  font-weight: 400;
+  color: var(--text-strong);
+  margin: 4px 0 2px;
+  letter-spacing: 0.5px;
+}
+
+.tl-desc {
+  font-size: 0.82em;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.tl-item--start .tl-card {
+  border-color: var(--glass-border-strong);
+  background: var(--glass-bg-hover);
+}
+
+.tl-item--future .tl-card {
+  border-style: dashed;
+  opacity: 0.8;
+}
+
+/* ==========================================================================
+   9. 每日情话
+   ========================================================================== */
+.quote {
+  position: relative;
+  padding: 30px 34px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.quote-text {
+  position: relative;
+  z-index: 1;
+  font-size: 1.1em;
+  line-height: 1.95;
+  color: var(--text-strong);
+  font-weight: 300;
+  letter-spacing: 0.8px;
+  transition: opacity var(--dur-fast) var(--ease);
+  min-height: 2em;
+}
+
+.quote-text.is-fading { opacity: 0; }
+
+.quote-date {
+  margin-top: 12px;
+  font-size: 0.72em;
+  letter-spacing: 2px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.quote-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   10. 通用小按钮
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius-pill);
+  font-size: 0.82em;
+  letter-spacing: 1px;
+  color: var(--text-soft);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: transform var(--dur-fast) var(--ease), background var(--dur) var(--ease),
+              border-color var(--dur) var(--ease), color var(--dur) var(--ease);
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+  color: var(--text-strong);
+  transform: translateY(-1px);
+}
+
+.btn:active { transform: translateY(0) scale(0.98); }
+.btn[hidden] { display: none; }
+
+.btn--primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.28);
+}
+
+.btn--primary:hover { color: #fff; opacity: 0.94; }
+
+/* ==========================================================================
+   11. 里程碑进度
+   ========================================================================== */
+.milestone { padding: 22px 26px; }
+
+.milestone-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.milestone-name {
+  font-size: 0.92em;
+  color: var(--text-soft);
+  letter-spacing: 1px;
+}
+
+.milestone-label {
+  font-size: 1.15em;
+  font-weight: 300;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.milestone-track {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-border);
+  overflow: hidden;
+}
+
+.milestone-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  box-shadow: 0 0 14px rgba(255, 107, 107, 0.5);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 1s var(--ease-out);
+}
+
+.milestone-sub {
+  margin-top: 12px;
+  font-size: 0.78em;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   12. 页脚 / 访问足迹
+   ========================================================================== */
+.footer {
+  text-align: center;
+  padding: var(--space-xl) 0 20px;
+}
+
+.footer .heart-row {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  font-size: 1.6em;
+  margin-bottom: 12px;
+}
+
+.footer .heart-row span {
+  display: inline-block;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.footer .heart-row span:nth-child(2) { animation-delay: 0.3s; }
+.footer .heart-row span:nth-child(3) { animation-delay: 0.6s; }
+.footer .heart-row span:nth-child(4) { animation-delay: 0.9s; }
+.footer .heart-row span:nth-child(5) { animation-delay: 1.2s; }
+
+.footer p {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  letter-spacing: 2px;
+  font-weight: 300;
+}
+
+.footer p strong { color: var(--primary); font-weight: 400; }
+
+.visit-stats {
+  margin-top: 12px;
+  font-size: 0.78em;
+  color: var(--text-faint);
+  letter-spacing: 1px;
+}
+
+.footer-actions {
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   13. 特效层（爱心粒子 / 撒花 / 提示条）
+   ========================================================================== */
+.fx-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.fx-particle {
+  position: absolute;
+  will-change: transform, opacity;
+  transform: translate(-50%, -50%);
+  animation-name: fx-burst;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes fx-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+               scale(1.1) rotate(var(--rot));
+  }
+}
+
+.fx-fall {
+  position: absolute;
+  top: -6vh;
+  will-change: transform, opacity;
+  animation-name: fx-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes fx-fall {
+  0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+  10%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(118vh) rotate(540deg); }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  z-index: var(--z-toast);
+  padding: 11px 22px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border-strong);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+  color: var(--text-strong);
+  font-size: 0.86em;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  transform: translate(-50%, 16px);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  pointer-events: none;
+}
+
+.toast.is-in { opacity: 1; transform: translate(-50%, 0); }
+
+/* ==========================================================================
+   14. 海报弹窗
+   ========================================================================== */
+.poster-modal {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.62);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.poster-modal[hidden] { display: none; }
+.poster-modal.is-open { opacity: 1; }
+
+.poster-dialog {
+  width: min(420px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+  border-radius: var(--radius-xl);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  box-shadow: var(--shadow);
+  transform: translateY(14px) scale(0.98);
+  transition: transform var(--dur) var(--ease-out);
+}
+
+.poster-modal.is-open .poster-dialog { transform: translateY(0) scale(1); }
+
+.poster-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.poster-head h3 {
+  font-size: 0.98em;
+  font-weight: 400;
+  letter-spacing: 2px;
+  color: var(--text-soft);
+}
+
+.poster-close {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  font-size: 0.9em;
+  color: var(--text-muted);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.poster-close:hover { background: var(--glass-bg-hover); color: var(--text-strong); }
+
+.poster-preview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+#poster-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.poster-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.poster-actions .btn { flex: 1; padding: 11px 18px; }
+
+@media (max-width: 520px) {
+  .controls { top: 14px; right: 14px; }
+  .ctrl-btn { width: 42px; height: 42px; font-size: 1.05em; }
+  .header h1 { font-size: 1.8em; letter-spacing: 4px; }
+  .header .subtitle { font-size: 0.85em; letter-spacing: 2px; }
+  .digit-value { font-size: 2em; }
+  .days-display { padding: 14px 20px; gap: 4px; }
+  .days-display .separator { font-size: 1.6em; }
+  .time-counter .big-days strong { font-size: 1.6em; }
+  .letter { padding: 28px 20px; }
+  .letter .line { font-size: 0.95em; }
+  .letter::before, .letter::after { font-size: 6em; }
+  .letter::after { bottom: -36px; }
+  .gallery .card { padding: 20px 14px; }
+  .quote { padding: 24px 20px; }
+  .quote-text { font-size: 1em; }
+  .timeline { padding-left: 30px; }
+  .tl-dot { left: -30px; width: 24px; height: 24px; font-size: 0.75em; }
+  .milestone { padding: 18px 18px; }
+}
+
+@media (max-width: 420px) {
+  .header h1 { font-size: 1.4em; letter-spacing: 3px; }
+  .digit-value { font-size: 1.4em; }
+  .days-display { padding: 10px 14px; }
+  .days-display .separator { font-size: 1.2em; }
+  .letter { padding: 20px 16px; }
+  .letter .line { font-size: 0.88em; }
+  .anniv { padding: 12px 14px; gap: 10px; }
+  .anniv-days-num { font-size: 1.25em; }
+}
+
+/* 打印：去掉装饰，只留文字 */
+@media print {
+  #stars-canvas,
+  .floating-hearts,
+  .controls,
+  .fx-layer,
+  .footer-actions,
+  .poster-modal { display: none !important; }
+  body { background: #fff; color: #000; animation: none; }
+}

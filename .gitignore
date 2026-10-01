@@ -1,0 +1,19 @@
+# 构建产物
+dist/
+node_modules/
+
+# 本地私有内容 —— 不要提交
+src/config/site.config.local.js
+assets/audio/*.mp3
+assets/audio/*.m4a
+assets/audio/*.ogg
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# 日志与临时文件
+*.log
+*.tmp

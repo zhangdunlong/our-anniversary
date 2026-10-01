@@ -1,0 +1,30 @@
+# ============================================================================
+# _headers —— Cloudflare Pages 响应头配置
+# ============================================================================
+
+/*
+  # 三重防索引：robots.txt + HTML meta + 响应头
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  # 禁止被 iframe 嵌套（防钓鱼页面套壳）
+  X-Frame-Options: SAMEORIGIN
+  # 不让浏览器猜 MIME 类型
+  X-Content-Type-Options: nosniff
+  # 只允许同源资源 + data:/blob:（海报导出用 blob:）
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; media-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'self'
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
+
+# 静态资源：强缓存一年（文件名里没带 hash，所以用重新验证兜底）
+/src/*
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=604800
+
+# Service Worker 必须每次校验，否则更新发不出去
+/sw.js
+  Cache-Control: no-cache, must-revalidate
+
+# HTML 不缓存，保证秒级看到最新内容
+/index.html
+  Cache-Control: no-cache, must-revalidate

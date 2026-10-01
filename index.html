@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+
+  <title>我们的纪念日 ❤</title>
+  <meta name="description" id="meta-description" content="记录我们的每一天 —— 相爱计时、纪念日、恋爱时间轴">
+  <meta name="author" content="小美">
+  <meta name="theme-color" content="#1a0008">
+
+  <!-- 个人纪念页：禁止搜索引擎收录（robots.txt 与 _headers 双保险，这里是第三重） -->
+  <meta name="robots" content="noindex, nofollow, noarchive">
+
+  <!-- 社交分享卡片 -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="我们的纪念日 ❤">
+  <meta property="og:description" content="以爱之名，岁月为证">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- 图标：内联 SVG，零请求，避免 favicon 404 -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❤️</text></svg>">
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+
+  <!-- 样式：按令牌 → 基础 → 布局 → 组件 四层顺序加载，层间依赖单向 -->
+  <link rel="stylesheet" href="src/styles/tokens.css">
+  <link rel="stylesheet" href="src/styles/base.css">
+  <link rel="stylesheet" href="src/styles/layout.css">
+  <link rel="stylesheet" href="src/styles/components.css">
+
+  <script>
+    /* ------------------------------------------------------------------------
+       主题预置脚本（必须内联、必须在 <head> 里同步执行）
+       作用：在首次绘制之前就把 data-theme 定下来，避免「先闪一下深色再变浅色」。
+       逻辑与 src/modules/theme.js 保持一致，后者接管后会重新应用一次（幂等）。
+       ------------------------------------------------------------------------ */
+    (function () {
+      try {
+        var saved = localStorage.getItem('love:theme');
+        var mode = saved ? JSON.parse(saved) : 'auto';
+        if (mode === 'auto' || !mode) {
+          mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'night' : 'dawn';
+        }
+        document.documentElement.setAttribute('data-theme', mode === 'dawn' ? 'dawn' : 'night');
+      } catch (e) { /* 隐私模式下读不到存储，用默认的 night 即可 */ }
+    })();
+  </script>
+</head>
+
+<body id="top">
+
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <!-- ===================== 背景层 ===================== -->
+  <canvas id="stars-canvas" aria-hidden="true"></canvas>
+  <div class="floating-hearts" id="floating-hearts" aria-hidden="true"></div>
+
+  <!-- ===================== 背景音乐 =====================
+       这里刻意不写 <source>：音频地址由 config.music.src 提供，
+       由 music.js 在启动时挂载。好处是没有配音频（例如开源示例版）
+       时不会产生一次 404 请求。 -->
+  <audio id="bgm" loop preload="none"></audio>
+
+  <!-- ===================== 右上角控制区 ===================== -->
+  <div class="controls">
+    <button id="theme-btn" class="ctrl-btn" type="button" hidden title="切换主题">🌙</button>
+
+    <div class="ctrl-group" id="music-group">
+      <button id="music-btn" class="ctrl-btn ctrl-btn--music" type="button"
+              aria-label="播放音乐" title="播放音乐" aria-describedby="music-panel">
+        <span class="ripple" id="music-ripple" style="display:none;"></span>
+        <span id="music-icon" aria-hidden="true">🔇</span>
+      </button>
+
+      <button id="music-expand" class="ctrl-expand" type="button" aria-label="展开播放控制">▾</button>
+
+      <div class="ctrl-panel" id="music-panel">
+        <div class="ctrl-panel-title" id="music-title">背景音乐</div>
+        <input type="range" id="music-progress" min="0" max="1000" value="0"
+               aria-label="播放进度">
+        <div class="ctrl-panel-row">
+          <span class="ctrl-panel-time" id="music-time">0:00 / 0:00</span>
+          <input type="range" id="music-volume" min="0" max="1" step="0.01"
+                 aria-label="音量" title="音量">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 主内容 ===================== -->
+  <div class="container" id="main">
+
+    <!-- ---------- 页头 ---------- -->
+    <header class="header">
+      <h1 id="site-title">我们的纪念日</h1>
+      <p class="subtitle"><span>—</span> <span id="site-subtitle">以爱之名，岁月为证</span> <span>—</span></p>
+    </header>
+
+    <!-- ---------- 相爱计时器 ---------- -->
+    <section class="time-counter" aria-label="相爱时间">
+      <p class="names">
+        <span class="heart-symbol" aria-hidden="true">❤</span>
+        <span id="couple-names">小美 &amp; 小杰</span>
+        <span class="heart-symbol" aria-hidden="true">❤</span>
+      </p>
+      <p class="label">我们已经在一起了</p>
+      <p class="big-days">相爱 <strong id="total-days">---</strong> 天</p>
+
+      <div class="days-display" role="timer" aria-live="off">
+        <div class="digit-group">
+          <span class="digit-value" id="clock-days">0</span>
+          <span class="digit-label">天</span>
+        </div>
+        <span class="separator" aria-hidden="true">:</span>
+        <div class="digit-group">
+          <span class="digit-value" id="clock-hours">00</span>
+          <span class="digit-label">时</span>
+        </div>
+        <span class="separator" aria-hidden="true">:</span>
+        <div class="digit-group">
+          <span class="digit-value" id="clock-minutes">00</span>
+          <span class="digit-label">分</span>
+        </div>
+        <span class="separator" aria-hidden="true">:</span>
+        <div class="digit-group">
+          <span class="digit-value" id="clock-seconds">00</span>
+          <span class="digit-label">秒</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 每日情话 ---------- -->
+    <section class="section" aria-labelledby="sec-quote">
+      <div class="glass quote" id="daily-quote">
+        <p class="quote-text" id="quote-text">…</p>
+        <p class="quote-date" id="quote-date"></p>
+        <div class="quote-actions">
+          <button class="btn" id="quote-next" type="button">换一句</button>
+          <button class="btn" id="quote-copy" type="button" hidden>复制</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 里程碑进度 ---------- -->
+    <section class="section" aria-labelledby="sec-milestone">
+      <h2 class="sr-only" id="sec-milestone">里程碑进度</h2>
+      <div class="glass milestone" id="milestone">
+        <div class="milestone-head">
+          <span class="milestone-name">下一个里程碑</span>
+          <span class="milestone-label" id="milestone-label">0%</span>
+        </div>
+        <div class="milestone-track"
+             role="progressbar" aria-labelledby="milestone-sub" aria-valuemin="0" aria-valuemax="100">
+          <div class="milestone-fill" id="milestone-fill"></div>
+        </div>
+        <p class="milestone-sub" id="milestone-sub"></p>
+      </div>
+    </section>
+
+    <!-- ---------- 情书 ---------- -->
+    <section class="section" aria-labelledby="sec-letter">
+      <div class="section-head">
+        <h2 class="section-title" id="sec-letter">写给宝宝的信</h2>
+        <span class="section-hint">向下滚动，慢慢读</span>
+      </div>
+      <article class="glass letter" id="letter"></article>
+    </section>
+
+    <!-- ---------- 恋爱时间轴 ---------- -->
+    <section class="section" aria-labelledby="sec-timeline">
+      <div class="section-head">
+        <h2 class="section-title" id="sec-timeline">我们一起走过</h2>
+        <span class="section-hint">时光机</span>
+      </div>
+      <ol class="timeline" id="timeline"></ol>
+    </section>
+
+    <!-- ---------- 纪念日 ---------- -->
+    <section class="section" aria-labelledby="sec-anniv">
+      <div class="section-head">
+        <h2 class="section-title" id="sec-anniv">值得期待的日子</h2>
+        <span class="section-hint">按临近顺序排列</span>
+      </div>
+      <div class="anniv-list" id="anniversary-list"></div>
+    </section>
+
+    <!-- ---------- 记忆卡片 ---------- -->
+    <section class="section" aria-labelledby="sec-gallery">
+      <h2 class="sr-only" id="sec-gallery">记忆</h2>
+      <div class="grid grid--4 gallery" id="gallery"></div>
+    </section>
+
+    <!-- ---------- 页脚 ---------- -->
+    <footer class="footer">
+      <div class="heart-row" aria-hidden="true">
+        <span>💕</span><span>❤</span><span>💖</span><span>❤</span><span>💕</span>
+      </div>
+      <p>Made with <strong>love</strong> · <span id="footer-year">2024</span> — ∞</p>
+
+      <p class="visit-stats" id="visit-stats" hidden>
+        <span id="visit-text"></span>
+      </p>
+
+      <div class="footer-actions">
+        <button class="btn btn--primary" id="poster-open" type="button">生成纪念海报</button>
+        <button class="btn" id="letter-replay" type="button">重读情书</button>
+        <button class="btn" id="print-page" type="button">打印 / 存为 PDF</button>
+        <a class="btn" href="#top">回到顶部</a>
+      </div>
+    </footer>
+  </div>
+
+  <!-- ===================== 海报弹窗 ===================== -->
+  <div class="poster-modal" id="poster-modal" hidden role="dialog" aria-modal="true"
+       aria-labelledby="poster-title">
+    <div class="poster-dialog">
+      <div class="poster-head">
+        <h3 id="poster-title">我们的纪念海报</h3>
+        <button class="poster-close" id="poster-close" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="poster-preview">
+        <canvas id="poster-canvas" width="1080" height="1620"
+                role="img" aria-label="纪念海报预览"></canvas>
+      </div>
+      <div class="poster-actions">
+        <button class="btn btn--primary" id="poster-download" type="button">保存图片</button>
+        <button class="btn" id="poster-share" type="button" hidden>分享给 TA</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 脚本 ===================== -->
+  <script type="module" src="src/main.js"></script>
+  <noscript>
+    <div style="text-align:center;padding:40px 20px;color:#ff8e8e;">
+      这一页需要开启 JavaScript 才能显示计时与情书 ❤
+    </div>
+  </noscript>
+</body>
+</html>

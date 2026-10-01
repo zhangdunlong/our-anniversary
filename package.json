@@ -1,0 +1,41 @@
+{
+  "name": "our-anniversary",
+  "version": "1.0.0",
+  "private": true,
+  "description": "零依赖的浪漫纪念日主页：相爱计时、纪念日倒计时、恋爱时间轴、分享海报、昼夜双主题",
+  "type": "module",
+  "keywords": [
+    "anniversary",
+    "love",
+    "countdown",
+    "cloudflare-pages",
+    "pwa"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "serve": "node scripts/dev-server.mjs 5173",
+    "check": "node scripts/check.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "build": "node scripts/build-site.mjs",
+    "build:standalone": "node scripts/build-standalone.mjs",
+    "build:standalone:audio": "node scripts/build-standalone.mjs --with-audio",
+    "icons": "python scripts/gen-icons.py",
+    "desensitize": "node scripts/desensitize.mjs",
+    "deploy": "npm run build && wrangler pages deploy dist/site --project-name=our-anniversary --branch=main"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourname/our-anniversary.git"
+  },
+  "homepage": "https://github.com/yourname/our-anniversary#readme",
+  "bugs": {
+    "url": "https://github.com/yourname/our-anniversary/issues"
+  },
+  "author": ""
+}
