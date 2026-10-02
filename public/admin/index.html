@@ -168,10 +168,30 @@
 
           <div class="field">
             <label class="field-label" for="edit-date">日期<span class="req">*</span></label>
-            <input class="input" type="text" id="edit-date" placeholder="YYYY-MM-DD 或 MM-DD"
-                   autocomplete="off" required inputmode="numeric">
+            <div class="date-wrap">
+              <input class="input" type="text" id="edit-date" placeholder="YYYY-MM-DD 或 MM-DD"
+                     autocomplete="off" required inputmode="numeric">
+              <button class="date-toggle" type="button" id="date-btn"
+                      aria-label="打开日历选择日期" title="打开日历选择">📅</button>
+
+              <!-- 日历选择面板：结构为静态骨架，格子由 JS 渲染 -->
+              <div class="date-picker" id="date-picker" hidden>
+                <div class="dp-head">
+                  <button class="dp-nav" type="button" id="dp-prev" aria-label="上个月">‹</button>
+                  <span class="dp-title" id="dp-label">—</span>
+                  <select class="dp-year" id="dp-year" aria-label="选择年份"></select>
+                  <button class="dp-nav" type="button" id="dp-next" aria-label="下个月">›</button>
+                </div>
+                <div class="dp-week" aria-hidden="true">
+                  <span>一</span><span>二</span><span>三</span><span>四</span>
+                  <span>五</span><span>六</span><span>日</span>
+                </div>
+                <div class="dp-grid" id="dp-grid"></div>
+                <button class="dp-mode" type="button" id="dp-mode-btn"></button>
+              </div>
+            </div>
             <p class="field-hint">
-              格式 <b>YYYY-MM-DD</b>（完整日期）或 <b>MM-DD</b>（只写月日 = 每年重复）
+              格式 <b>YYYY-MM-DD</b>（完整日期）或 <b>MM-DD</b>（只写月日 = 每年重复），可手输也可点 📅 选择
             </p>
             <p class="field-error" id="err-date" role="alert"></p>
           </div>

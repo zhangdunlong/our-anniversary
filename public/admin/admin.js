@@ -750,6 +750,7 @@ function closeEdit() {
   editModal.hidden = true;
   document.body.style.overflow = '';
   state.editing = null;
+  closeDatePicker();   // 别让日历开着的状态带到下一次打开
 }
 
 function openDelete(item) {
@@ -853,6 +854,189 @@ function updateRecurringHint() {
       : '只倒计时到指定那一年，之后不再提醒。';
   }
 }
+
+/* ==========================================================================
+   日期选择器
+   --------------------------------------------------------------------------
+   自研轻量日历（零依赖）：点 📅 弹出，选完回填输入框。
+   两种模式与数据格式一一对应：
+     · full     → YYYY-MM-DD（完整日期，带年份下拉）
+     · monthday → MM-DD     （只选月日 = 每年重复，隐藏年份）
+   手输依然有效，日历只是辅助；打开时从输入框现有值反推初始状态。
+   ========================================================================== */
+
+const dateInput = $('#edit-date');
+const dateWrap = document.querySelector('.date-wrap');
+const dpPanel = $('#date-picker');
+const dpGrid = $('#dp-grid');
+const dpLabel = $('#dp-label');
+const dpYear = $('#dp-year');
+const dpModeBtn = $('#dp-mode-btn');
+
+const DP_YEAR_MIN = 1900;
+let dpState = { year: 0, month: 0, mode: 'full' };   // mode: 'full' | 'monthday'
+
+function dpYearMax() { return new Date().getFullYear() + 5; }
+
+/** 从输入框现有值反推面板状态；无法识别时落到「今年本月」 */
+function syncDpFromInput() {
+  const v = dateInput.value.trim();
+  let y, m, mode;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    y = Number(v.slice(0, 4)); m = Number(v.slice(5, 7)); mode = 'full';
+  } else if (/^\d{2}-\d{2}$/.test(v)) {
+    y = new Date().getFullYear(); m = Number(v.slice(0, 2)); mode = 'monthday';
+  } else {
+    const t = new Date();
+    y = t.getFullYear(); m = t.getMonth() + 1; mode = 'full';
+  }
+  dpState = { year: y, month: m, mode: mode };
+}
+
+/** 年份下拉只在 full 模式出现；范围 1900 – 今年+5（与后端 1900–2200 校验兼容） */
+function dpPaintYearOptions() {
+  const max = dpYearMax();
+  const frag = document.createDocumentFragment();
+  for (let y = DP_YEAR_MIN; y <= max; y++) {
+    const opt = document.createElement('option');
+    opt.value = String(y);
+    opt.textContent = y + ' 年';
+    frag.appendChild(opt);
+  }
+  dpYear.innerHTML = '';
+  dpYear.appendChild(frag);
+}
+
+/** 解析输入框当前值 → {y,m,d} / {m,d} / null，供「选中」高亮判断 */
+function parseDpValue() {
+  const v = dateInput.value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    return { y: Number(v.slice(0, 4)), m: Number(v.slice(5, 7)), d: Number(v.slice(8, 10)) };
+  }
+  if (/^\d{2}-\d{2}$/.test(v)) {
+    return { m: Number(v.slice(0, 2)), d: Number(v.slice(3, 5)) };
+  }
+  return null;
+}
+
+function renderDatePicker() {
+  const y = dpState.year;
+  const m = dpState.month;
+  const isFull = dpState.mode === 'full';
+
+  dpLabel.textContent = m + ' 月';
+  dpYear.hidden = !isFull;
+  if (isFull) dpYear.value = String(y);
+  dpModeBtn.textContent = isFull ? '只选月-日（每年重复）' : '选择完整日期（含年份）';
+
+  dpGrid.innerHTML = '';
+  const firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7;   // 周一起始
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const daysPrev = new Date(y, m - 1, 0).getDate();
+  const today = new Date();
+  const sel = parseDpValue();
+
+  for (let i = 0; i < 42; i++) {
+    let day, monthOff = 0;
+    if (i < firstDow) { day = daysPrev - firstDow + 1 + i; monthOff = -1; }
+    else if (i >= firstDow + daysInMonth) { day = i - (firstDow + daysInMonth) + 1; monthOff = 1; }
+    else { day = i - firstDow + 1; }
+
+    // 折算成绝对年月，供「今天 / 选中」判断与回填使用
+    let yy = y, mm = m;
+    if (monthOff === -1) { mm = m - 1; if (mm < 1) { mm = 12; yy--; } }
+    else if (monthOff === 1) { mm = m + 1; if (mm > 12) { mm = 1; yy++; } }
+
+    const isToday = !monthOff &&
+      yy === today.getFullYear() && mm === today.getMonth() + 1 && day === today.getDate();
+    const isSelected = !!sel && sel.m === mm && sel.d === day &&
+      (dpState.mode === 'monthday' || sel.y === yy);
+
+    const cell = el('button', {
+      type: 'button',
+      class: 'dp-cell' +
+        (monthOff ? ' is-out' : '') +
+        (isToday ? ' is-today' : '') +
+        (isSelected ? ' is-selected' : '')
+    });
+    cell.textContent = String(day);
+    cell.addEventListener('click', (function (py, pm, pd) {
+      return function () { applyPick(py, pm, pd); };
+    })(yy, mm, day));
+    dpGrid.appendChild(cell);
+  }
+}
+
+/** 选中某天 → 回填输入框（按模式决定格式），并联动提示与错误清理 */
+function applyPick(yy, mm, dd) {
+  const pad = function (n) { return String(n).padStart(2, '0'); };
+  dateInput.value = dpState.mode === 'full'
+    ? yy + '-' + pad(mm) + '-' + pad(dd)
+    : pad(mm) + '-' + pad(dd);
+
+  // 与手输一致地联动「每年重复」提示；顺手清掉上一次提交留下的日期错误
+  dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+  const errBox = $('#err-date');
+  if (errBox) errBox.textContent = '';
+  dateInput.removeAttribute('aria-invalid');
+
+  closeDatePicker();
+  dateInput.focus();
+}
+
+function dpShift(delta) {
+  let m = dpState.month + delta;
+  let y = dpState.year;
+  if (m < 1) { m = 12; y--; }
+  else if (m > 12) { m = 1; y++; }
+  dpState.month = m;
+  dpState.year = y;
+  renderDatePicker();
+}
+
+function openDatePicker() {
+  syncDpFromInput();
+  if (dpYear.options.length === 0) dpPaintYearOptions();
+  dpYear.value = String(dpState.year);
+  renderDatePicker();
+  dpPanel.hidden = false;
+}
+
+function closeDatePicker() {
+  dpPanel.hidden = true;
+}
+
+function toggleDatePicker() {
+  if (dpPanel.hidden) openDatePicker();
+  else closeDatePicker();
+}
+
+$('#date-btn').addEventListener('click', toggleDatePicker);
+$('#dp-prev').addEventListener('click', function () { dpShift(-1); });
+$('#dp-next').addEventListener('click', function () { dpShift(1); });
+
+dpYear.addEventListener('change', function () {
+  dpState.year = Number(dpYear.value);
+  renderDatePicker();
+});
+
+dpModeBtn.addEventListener('click', function () {
+  dpState.mode = dpState.mode === 'full' ? 'monthday' : 'full';
+  if (dpState.mode === 'full' &&
+      (dpState.year < DP_YEAR_MIN || dpState.year > dpYearMax())) {
+    dpState.year = new Date().getFullYear();
+  }
+  if (dpYear.options.length === 0) dpPaintYearOptions();
+  dpYear.value = String(dpState.year);
+  renderDatePicker();
+});
+
+// 点击面板外自动收起
+document.addEventListener('click', function (e) {
+  if (dpPanel.hidden) return;
+  if (dateWrap && dateWrap.contains(e.target)) return;
+  closeDatePicker();
+});
 
 /* ==========================================================================
    事件绑定
@@ -1123,6 +1307,7 @@ $('#pwd-form').addEventListener('submit', async function (e) {
 
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
+  if (!dpPanel.hidden) { closeDatePicker(); return; }   // 日历在最上层，先收它
   if (!delModal.hidden) closeDelete();
   else if (!editModal.hidden) closeEdit();
   else if (!pwdModal.hidden) closePassword();

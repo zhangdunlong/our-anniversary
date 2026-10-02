@@ -17,7 +17,7 @@
    缓存版本号：改动静态资源后把 VERSION 加一，即可强制全量更新。
    ========================================================================== */
 
-const VERSION = 'v1.1.0';
+const VERSION = 'v1.2.0';
 const CACHE_NAME = 'love-' + VERSION;
 
 // 预缓存清单：首屏必需的最小集合
@@ -104,6 +104,13 @@ self.addEventListener('fetch', function (event) {
   // 注意：父级 fetch 传 cache:'no-store' 并不能阻止 SW 的 caches.match 命中，
   // 两者是独立的缓存层，所以必须在这里显式放行。
   if (url.pathname.indexOf('/api/') === 0) return;
+
+  // 后台管理区同样完全不接管。
+  // 踩过的坑：SW 的 scope 是 '/'，用户先逛过前台后，这里对 /admin/admin.js
+  // 走 cache-first —— 部署新版后台后，浏览器仍在执行旧脚本（HTML 是新的、
+  // 按钮在页面上，事件却没绑定），表现为「按钮看得见、点不动」。
+  // 后台是工具页，正确性永远优先于离线可用。
+  if (url.pathname.indexOf('/admin') === 0) return;
 
   // 音频走「仅缓存 + 网络」，不做预缓存（体积大，按需缓存即可）
   const isNavigation = req.mode === 'navigate' ||
