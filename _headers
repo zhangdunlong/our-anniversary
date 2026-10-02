@@ -28,3 +28,32 @@
 # HTML 不缓存，保证秒级看到最新内容
 /index.html
   Cache-Control: no-cache, must-revalidate
+
+# ============================================================================
+# 后台管理区：禁止索引 + 禁止缓存 + 更严的 CSP
+# ============================================================================
+# Cloudflare Pages 的 _headers 规则里，越靠后的规则优先级越高。
+# 所以后台的规则必须写在前台通用规则之后。
+
+/admin/*
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet, noimageindex
+  Cache-Control: no-store, no-cache, must-revalidate
+  X-Frame-Options: DENY
+  # 后台不加载任何外部资源；connect-src 放开同源以便调用 /api/*
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), interest-cohort=()
+
+/admin/admin.js
+  Cache-Control: no-store, no-cache, must-revalidate
+
+/admin/admin.css
+  Cache-Control: no-store, no-cache, must-revalidate
+
+# ============================================================================
+# API：绝不缓存（响应里也带了 no-store，这里是双保险）
+# ============================================================================
+/api/*
+  Cache-Control: no-store, no-cache, must-revalidate
+  X-Robots-Tag: noindex, nofollow, noarchive, nosnippet
+  X-Content-Type-Options: nosniff

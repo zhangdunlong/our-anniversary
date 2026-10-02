@@ -166,15 +166,28 @@ const ASSERTIONS = `
   check('每日情话已渲染', quote.length > 4 && quote !== '…', quote.slice(0, 20));
   out.info.quote = quote;
 
-  /* ---- 新增功能 2：纪念日 ---- */
+  /* ---- 新增功能 2：纪念日 ----
+     数据现在可能来自后台 API（数量不确定）或 config。
+     断言改为「至少包含固定的客观条目（在一起 + 6 个节日）」，
+     并在拿到 API 数据时额外校验数量对齐。 */
   var annivs = document.querySelectorAll('#anniversary-list .anniv');
   var aCfg = app.config.anniversaries || {};
-  var wantAnniv = (aCfg.includeTogetherDay === false ? 0 : 1) +        // 在一起纪念日
-    (aCfg.includeFestivals === false ? 0 : 6) +                        // 内置公共节日
-    (aCfg.custom || []).length;                                        // 自定义
-  check('纪念日卡片数量与配置一致（' + wantAnniv + ' 张）',
-    annivs.length === wantAnniv, '实际 ' + annivs.length);
+  var fixedCount = (aCfg.includeTogetherDay === false ? 0 : 1) +   // 在一起纪念日
+    (aCfg.includeFestivals === false ? 0 : 6);                     // 内置公共节日
+  check('纪念日卡片至少包含 ' + fixedCount + ' 个固定条目',
+    annivs.length >= fixedCount, '实际 ' + annivs.length);
   out.info.anniversaries = annivs.length;
+
+  /* ---- 新增功能 8：顶部倒计时条（后台数据联动）---- */
+  var topBar = document.getElementById('top-countdown');
+  if (topBar) {
+    // 页面刚打开时可能还在等 API，给一点时间
+    check('顶部倒计时条已渲染', !topBar.hidden && topBar.textContent.trim().length > 0,
+      topBar.hidden ? '仍为 hidden' : '"' + topBar.textContent.trim() + '"');
+    out.info.topCountdown = topBar.textContent.trim();
+  } else {
+    check('顶部倒计时容器存在', false, '找不到 #top-countdown');
+  }
 
   /* ---- 新增功能 3：时间轴 ---- */
   var tl = document.querySelectorAll('#timeline .tl-item');

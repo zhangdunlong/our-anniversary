@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#1a0008">
+
+  <title>纪念日管理 · 后台</title>
+
+  <!-- 后台绝不索引：三重保险的第一重 -->
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+  <meta name="referrer" content="no-referrer">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚙️</text></svg>">
+
+  <!-- 复用前台的设计令牌，保证双主题与整体风格一致 -->
+  <link rel="stylesheet" href="../src/styles/tokens.css">
+  <link rel="stylesheet" href="admin.css">
+
+  <script>
+    /* 与前台一致的主题预置：首帧前定好 data-theme，避免闪色 */
+    (function () {
+      try {
+        var saved = localStorage.getItem('love:theme');
+        var mode = saved ? JSON.parse(saved) : 'auto';
+        if (mode === 'auto' || !mode) {
+          mode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'night' : 'dawn';
+        }
+        document.documentElement.setAttribute('data-theme', mode === 'dawn' ? 'dawn' : 'night');
+      } catch (e) { /* 隐私模式：保持默认 night */ }
+    })();
+  </script>
+</head>
+
+<body>
+
+  <!-- ============================================================
+       视图一：登录
+       未登录时只显示这一屏，管理界面整体不参与渲染。
+       ============================================================ -->
+  <div class="login-wrap" id="view-login">
+    <div class="panel login-card">
+      <div class="login-heart" aria-hidden="true">❤️</div>
+      <h1 class="login-title">纪念日管理后台</h1>
+      <p class="login-sub">ADMIN CONSOLE</p>
+
+      <form id="login-form" novalidate>
+        <div class="field">
+          <label class="field-label" for="login-password">管理员密码</label>
+          <input class="input" type="password" id="login-password" name="password"
+                 autocomplete="current-password" placeholder="请输入密码" required>
+          <p class="field-error" id="login-error" role="alert"></p>
+        </div>
+        <button class="btn btn--primary" type="submit" id="login-submit">登 录</button>
+      </form>
+
+      <p class="login-foot"><a href="/">← 返回首页</a></p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       视图二：管理界面
+       ============================================================ -->
+  <div class="admin-shell" id="view-admin" hidden>
+
+    <header class="admin-topbar">
+      <div class="admin-brand">
+        <span class="brand-heart" aria-hidden="true">❤️</span>
+        <span>
+          纪念日管理
+          <small>共 <b id="stat-total">0</b> 条 · 首页显示 <b id="stat-visible">0</b> 条</small>
+        </span>
+      </div>
+
+      <button class="btn btn--icon" id="theme-btn" type="button" title="切换主题">🌙</button>
+      <button class="btn btn--icon" id="refresh-btn" type="button" title="刷新列表">↻</button>
+      <button class="btn btn--ghost" id="logout-btn" type="button">退出登录</button>
+    </header>
+
+    <main>
+      <!-- ---------- 工具条 ---------- -->
+      <div class="panel">
+        <div class="toolbar">
+          <input class="input" type="search" id="search-input" placeholder="搜索名称、备注或日期…"
+                 aria-label="搜索纪念日">
+          <select class="select" id="sort-select" aria-label="排序方式">
+            <option value="date">按日期排序</option>
+            <option value="created">按创建时间</option>
+            <option value="name">按名称排序</option>
+          </select>
+          <select class="select" id="filter-select" aria-label="筛选显示状态">
+            <option value="all">全部条目</option>
+            <option value="visible">仅首页显示</option>
+            <option value="hidden">仅已隐藏</option>
+          </select>
+          <button class="btn btn--primary" id="add-btn" type="button">+ 新增纪念日</button>
+        </div>
+      </div>
+
+      <!-- ---------- 列表 ---------- -->
+      <div class="panel">
+        <div class="list-head" aria-hidden="true">
+          <span></span>
+          <span>名称 / 备注</span>
+          <span>日期</span>
+          <span>类型</span>
+          <span style="text-align:right;">距今天数</span>
+          <span style="text-align:right;">操作</span>
+        </div>
+
+        <div id="list" role="list">
+          <!-- 加载骨架 -->
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+          <div class="skeleton"></div>
+        </div>
+      </div>
+    </main>
+
+    <p class="admin-footer">
+      <a href="/">← 返回首页</a> · 数据存储于 Cloudflare KV
+    </p>
+  </div>
+
+  <!-- ============================================================
+       模态框：新增 / 编辑
+       ============================================================ -->
+  <div class="modal" id="edit-modal" hidden role="dialog" aria-modal="true" aria-labelledby="edit-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="edit-title">新增纪念日</h3>
+        <button class="modal-close" type="button" id="edit-close" aria-label="关闭">✕</button>
+      </div>
+
+      <form id="edit-form" novalidate>
+        <div class="modal-body">
+          <input type="hidden" id="edit-id">
+
+          <div class="field">
+            <label class="field-label" for="edit-name">名称<span class="req">*</span></label>
+            <input class="input" type="text" id="edit-name" maxlength="30"
+                   placeholder="例如：宝宝生日" autocomplete="off" required>
+            <p class="field-error" id="err-name" role="alert"></p>
+          </div>
+
+          <div class="field-row">
+            <div class="field">
+              <label class="field-label" for="edit-icon">图标</label>
+              <input class="input" type="text" id="edit-icon" maxlength="4"
+                     placeholder="🎂" autocomplete="off">
+              <p class="field-hint">一个 emoji 即可</p>
+            </div>
+
+            <div class="field">
+              <label class="field-label" for="edit-type">类型<span class="req">*</span></label>
+              <select class="select" id="edit-type">
+                <option value="birthday">🎂 生日</option>
+                <option value="love">❤️ 恋爱纪念日</option>
+                <option value="festival">🎉 节日</option>
+                <option value="memorial">📌 纪念日</option>
+                <option value="other">✨ 其它</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="edit-date">日期<span class="req">*</span></label>
+            <input class="input" type="text" id="edit-date" placeholder="YYYY-MM-DD 或 MM-DD"
+                   autocomplete="off" required inputmode="numeric">
+            <p class="field-hint">
+              格式 <b>YYYY-MM-DD</b>（完整日期）或 <b>MM-DD</b>（只写月日 = 每年重复）
+            </p>
+            <p class="field-error" id="err-date" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="edit-note">备注说明</label>
+            <textarea class="textarea" id="edit-note" maxlength="100"
+                      placeholder="例如：记得提前准备礼物"></textarea>
+            <p class="field-error" id="err-note" role="alert"></p>
+            <p class="field-hint"><span id="note-count">0</span>/100</p>
+          </div>
+
+          <div class="field">
+            <label class="switch">
+              <input type="checkbox" id="edit-visible" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-text">显示在首页</span>
+            </label>
+          </div>
+
+          <div class="field">
+            <label class="switch">
+              <input type="checkbox" id="edit-recurring" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+              <span class="switch-text">每年重复（生日、纪念日等）</span>
+            </label>
+            <p class="field-hint" id="recurring-hint"></p>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn" type="button" id="edit-cancel">取消</button>
+          <button class="btn btn--primary" type="submit" id="edit-save">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       模态框：删除二次确认
+       ============================================================ -->
+  <div class="modal" id="del-modal" hidden role="dialog" aria-modal="true" aria-labelledby="del-title">
+    <div class="modal-card modal-card--sm">
+      <div class="modal-head">
+        <h3 id="del-title">确认删除</h3>
+        <button class="modal-close" type="button" id="del-close" aria-label="关闭">✕</button>
+      </div>
+      <div class="modal-body">
+        <p>确定要删除 <span class="strong" id="del-name"></span> 吗？</p>
+        <p style="font-size:12px;color:var(--text-faint);margin:0;">
+          删除后无法恢复，首页将不再显示该纪念日。
+        </p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" type="button" id="del-cancel">取消</button>
+        <button class="btn btn--danger" type="button" id="del-confirm">确认删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示条宿主 -->
+  <div class="toast-host" id="toast-host" aria-live="polite" aria-atomic="false"></div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

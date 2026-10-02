@@ -64,9 +64,15 @@
        时不会产生一次 404 请求。 -->
   <audio id="bgm" loop preload="none"></audio>
 
+  <!-- ===================== 顶部倒计时条 =====================
+       展示「距离最近的纪念日还有 N 天」，数据来自后台管理维护的内容。
+       初始 hidden，由 top-countdown.js 填充后显示（避免无数据时留一条空壳）。 -->
+  <div class="top-countdown" id="top-countdown" role="status" aria-live="polite" hidden></div>
+
   <!-- ===================== 右上角控制区 ===================== -->
   <div class="controls">
     <button id="theme-btn" class="ctrl-btn" type="button" hidden title="切换主题">🌙</button>
+    <a class="ctrl-btn" href="admin/" title="纪念日管理" aria-label="纪念日管理" style="text-decoration:none;">⚙️</a>
 
     <div class="ctrl-group" id="music-group">
       <button id="music-btn" class="ctrl-btn ctrl-btn--music" type="button"

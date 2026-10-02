@@ -16,7 +16,99 @@
 }
 
 /* ==========================================================================
-   2. 右上角控制区（主题切换 + 音乐播放器）
+   2. 顶部倒计时条（后台维护的最近纪念日）
+   --------------------------------------------------------------------------
+   固定在页面顶部居中，不参与文档流（position: fixed），因此不会挤压首屏。
+   内容为「距离 XX 还有 N 天」，当天命中时切换为高亮样式。
+   ========================================================================== */
+.top-countdown {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-control);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 180px);
+  padding: 8px 18px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-soft);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+              color var(--dur) var(--ease);
+  animation: top-cd-in var(--dur-slow) var(--ease-out);
+}
+
+.top-countdown[hidden] { display: none; }
+
+@keyframes top-cd-in {
+  from { opacity: 0; transform: translate(-50%, -12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.top-countdown .top-cd-icon { font-size: 15px; line-height: 1; flex: none; }
+
+.top-countdown .top-cd-text { overflow: hidden; text-overflow: ellipsis; }
+
+.top-countdown .top-cd-name { color: var(--text-strong); font-weight: 500; }
+
+.top-countdown .top-cd-days {
+  color: var(--primary);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  margin: 0 1px;
+}
+
+/* 今天就是纪念日：加强调色 + 呼吸感 */
+.top-countdown.is-today {
+  color: var(--text-strong);
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
+  box-shadow: var(--shadow-glow);
+}
+
+.top-countdown.is-today .top-cd-name { color: var(--primary); }
+
+.top-countdown .top-cd-emoji { margin-left: 2px; }
+
+/* 顶部条是 fixed 定位，会压住页头。
+   由 top-countdown.js 在渲染成功时给 body 加上这个类，
+   给主容器补足顶部留白；没数据时类会被移除，间距自动还原。 */
+body.has-top-countdown .container {
+  padding-top: calc(var(--space-xl) + 44px);
+}
+
+@media (max-width: 768px) {
+  .top-countdown {
+    top: auto;
+    bottom: 14px;
+    max-width: calc(100vw - 32px);
+    font-size: 12px;
+    padding: 7px 14px;
+  }
+  @keyframes top-cd-in {
+    from { opacity: 0; transform: translate(-50%, 12px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+  }
+  .top-countdown .top-cd-days { font-size: 15px; }
+
+  /* 窄屏时条在底部，不需要顶部留白 */
+  body.has-top-countdown .container { padding-top: var(--space-xl); }
+}
+
+/* ==========================================================================
+   3. 右上角控制区（主题切换 + 音乐播放器）
    ========================================================================== */
 .controls {
   position: fixed;

@@ -1,8 +1,8 @@
 # 我们的纪念日 · Our Anniversary
 
-一个**零依赖**的浪漫纪念日主页：相爱实时计时、纪念日倒计时、恋爱时间轴、每日情话、一键生成分享海报、昼夜双主题。
+一个**零依赖**的浪漫纪念日主页：相爱实时计时、纪念日倒计时、恋爱时间轴、每日情话、一键生成分享海报、昼夜双主题，**外加一个纪念日后台管理系统**。
 
-纯前端静态站点，不需要后端、不需要数据库、不需要构建工具。克隆下来改一个配置文件就能变成你自己的。
+前端是纯静态站点，不需要构建工具。后台可选 —— 接上 Cloudflare Pages + KV 后，就能在网页上直接增删改纪念日，不用再改代码重新部署。
 
 > 项目用原生 ES Modules 写成分层模块化架构，不含任何框架、不含任何运行时依赖。首次加载的全部代码约 60 KB（gzip 后更小）。
 
@@ -26,6 +26,7 @@
 | 功能 | 说明 |
 | --- | --- |
 | 纪念日倒计时 | 在一起纪念日 + 公共节日 + 自定义（生日等），按临近程度排序，当天自动撒花 |
+| **顶部倒计时条** | 页面顶部常驻「距离最近的纪念日还有 N 天」，当天切换为高亮 |
 | 恋爱时间轴 | 自动推算百天里程碑 + 自定义真实事件，按时间轴呈现「来路—此刻—去向」 |
 | 每日情话 | 以日期为种子确定性选取，同一天永远同一句；支持「换一句」「复制」 |
 | 里程碑进度条 | 距离下一个整百天还有多远，达成当天撒花庆祝 |
@@ -33,6 +34,17 @@
 | 昼夜双主题 | 星夜 / 晨光一键切换，默认跟随系统，选择会被记住 |
 | 点击彩蛋 | 每次点击散出小簇爱心，连点 7 次触发满屏爱心爆炸 |
 | 访问足迹 | 本地记录来访次数与连续天数（纯 localStorage，不联网、不上报） |
+
+### 后台管理（可选）
+
+| 功能 | 说明 |
+| --- | --- |
+| 独立登录页 | 管理员密码认证，未登录不能访问任何管理页面，支持退出登录 |
+| 纪念日增删改查 | 列表展示，支持按日期 / 创建时间 / 名称排序，支持关键词搜索与显示状态筛选 |
+| 字段完整 | 名称、日期、类型（生日 / 恋爱纪念日 / 节日 / 纪念日 / 其它）、备注、图标、是否显示在首页、是否每年重复 |
+| 数据校验 | 前后端同一套规则：日期必须真实存在（`2023-02-29` 会被拒）、名称不能为空；操作有明确成功 / 失败提示 |
+| 删除二次确认 | 弹出确认框并显示待删条目名，点「取消」不会误删 |
+| 响应式 | 手机端表格自动转为卡片，操作按钮换行放大，无横向滚动 |
 
 另外还带 **PWA**（可安装到手机桌面 + 离线可用）、**键盘可达**、**`prefers-reduced-motion` 适配**、**打印排版**。
 
@@ -76,6 +88,56 @@ couple: {
 
 ---
 
+## 启用后台管理（可选）
+
+后台需要一点服务端能力（存数据 + 验密码），用 **Cloudflare Pages + KV** 实现，仍然在免费额度内。
+不需要后台的话完全跳过这一节，站点会正常以 `site.config.js` 里的数据运行。
+
+```bash
+# 1. 建 KV 命名空间，把返回的 id 填进 wrangler.toml
+npx wrangler kv namespace create LOVE_DATA
+
+# 2. 设置管理员密码（交互式输入，不回显；密码不会写进任何文件）
+npm run init-admin
+
+# 3. 本地跑完整环境（含 Worker + KV）验证
+npm run dev:pages            # → http://127.0.0.1:8788
+npm run smoke:admin -- http://127.0.0.1:8788 <你的密码>
+
+# 4. 部署
+npm run build
+npx wrangler pages deploy dist/site --project-name=our-anniversary --branch=main
+```
+
+登录地址：`https://<你的域名>/admin/`
+
+### 后台是怎么工作的
+
+```
+浏览器
+  ├── /                前台纪念页
+  │     └── GET /api/anniversaries   ← 读后台维护的纪念日
+  ├── /admin/          后台管理页
+  │     └── /api/login · /api/logout · /api/admin/anniversaries[/:id]
+  └── 其余一切 → 静态资源
+                    ▲
+              _worker.js（单一 Worker，约 470 行）
+                    │
+              Cloudflare KV
+                ├── anniversaries    纪念日数组
+                ├── admin:password   "salt:sha256(salt+password)"
+                └── token:<value>    登录令牌（7 天 TTL）
+```
+
+**安全设计**：密码只以 `sha256(salt + password)` 形式存进 KV，永不落盘、永不进仓库；
+校验用恒定时间比较防时序攻击；登录签发 32 字节随机 token，带 TTL，过期自动清除；
+所有写操作强制鉴权；错误文案不区分「密码错」与「账号不存在」。
+
+**降级策略**：前台读取数据是三级兜底 —— 后台 API → `site.config.js` 的 `anniversaries.custom` → 内置公共节日。
+任何网络异常都被静默吞掉，用户看到的永远是内容而不是加载失败。所以**后台挂了，前台照常可用**。
+
+---
+
 ## 目录结构
 
 ```
@@ -85,6 +147,14 @@ couple: {
 ├── sw.js                         Service Worker（导航网络优先 / 资源缓存优先）
 ├── robots.txt                    禁止收录
 ├── _headers                      Cloudflare Pages 安全响应头
+├── wrangler.toml                 Pages 项目配置 + KV 绑定
+│
+├── public/                       ★ 会被摊平到部署根目录
+│   ├── _worker.js                后端：API + KV + 鉴权（不想用后台可以删掉整个 public/）
+│   └── admin/                    后台管理页
+│       ├── index.html            登录视图 + 管理视图 + 两个模态框
+│       ├── admin.css             后台样式（复用前台 tokens.css）
+│       └── admin.js              API 层 / 状态 / 渲染 / 校验 / 事件
 │
 ├── src/
 │   ├── config/
@@ -105,7 +175,8 @@ couple: {
 │   │   ├── letter.js             情书逐行书写
 │   │   ├── gallery.js            记忆卡片
 │   │   ├── music.js              音乐播放器
-│   │   ├── anniversaries.js      纪念日倒计时
+│   │   ├── anniversaries.js      纪念日倒计时（含后台数据接入 + 降级）
+│   │   ├── top-countdown.js      顶部倒计时条
 │   │   ├── timeline.js           恋爱时间轴
 │   │   ├── daily-quote.js        每日情话
 │   │   ├── milestone.js          里程碑进度
@@ -129,8 +200,11 @@ couple: {
 │
 └── scripts/                      开发工具（零依赖，全部用 Node 标准库）
     ├── dev-server.mjs            本地静态服务器
-    ├── check.mjs                 静态自检（id 对齐 / import 解析 / 语法 / 漏 import）
+    ├── check.mjs                 静态自检（id 对齐 / import 解析 / 语法 / 漏 import / KV 绑定）
     ├── smoke.mjs                 真实浏览器端到端冒烟（直连 CDP，不用 playwright）
+    ├── smoke-admin.mjs           后台 API 冒烟（37 项断言）
+    ├── smoke-admin-ui.mjs        后台界面冒烟（34 项断言，真实浏览器）
+    ├── init-admin.mjs            初始化管理员密码 → 写入 KV
     ├── build-site.mjs            产出干净的部署目录
     ├── build-standalone.mjs      自研微型打包器 → 单文件 HTML
     └── gen-icons.py              纯 Python 生成 PWA 图标（不用 Pillow）
@@ -150,6 +224,8 @@ couple: {
    基础层        core/*.js            与业务无关的通用能力
       ↓
    样式层        styles/*.css         tokens → base → layout → components
+
+   后端          _worker.js           与前端完全解耦：只认 HTTP 契约，不关心谁调用
 ```
 
 **依赖方向严格单向向下**：模块可以依赖 core，core 绝不依赖模块；模块之间不互相 import，需要通信就走 `core/bus.js`。这样删掉任意一个模块，其余代码都不会报错。
@@ -158,6 +234,7 @@ couple: {
 
 **1. 内容与代码彻底分离。**
 所有会变的文案、日期、人名都收敛进 `src/config/site.config.js`。`index.html` 里没有任何一句真实内容，只有结构骨架。想改情书不用翻 760 行 HTML。
+启用后台之后，纪念日这部分内容进一步从「改文件」变成「在网页上改」，连重新部署都不需要。
 
 **2. 一个模块坏掉，不能拖垮整页。**
 `main.js` 里每个模块都用 `safe()` 包裹：
@@ -169,7 +246,7 @@ mount('starfield', safe('星空背景', () => initStarfield(config)));
 某个模块抛异常只会打印一条 warning，其余模块照常工作。浏览器端冒烟测试正是靠这条机制，在页面「看起来正常」的情况下抓出了两个模块的崩溃。
 
 **3. 主题即变量，切换即改一个属性。**
-所有颜色都是 CSS 自定义属性，切换主题只是改 `<html data-theme>`。JS 从不接触具体色值 —— 连 Canvas 绘制的分享海报都是通过 `getComputedStyle` 读取变量取色，所以海报会自动跟随当前主题。
+所有颜色都是 CSS 自定义属性，切换主题只是改 `<html data-theme>`。JS 从不接触具体色值 —— 连 Canvas 绘制的分享海报都是通过 `getComputedStyle` 读取变量取色，所以海报会自动跟随当前主题。**后台也复用同一套变量**，因此风格天然一致、双主题自动生效。
 
 ### 性能取舍
 
@@ -183,38 +260,53 @@ mount('starfield', safe('星空背景', () => initStarfield(config)));
 
 ## 部署
 
-任何静态托管都可以。项目自带 Cloudflare Pages 的配置（`_headers` / `robots.txt`）。
+任何静态托管都可以跑前台。要用后台则需要 Cloudflare Pages（或任何支持 Workers + KV 的平台）。
 
 ### Cloudflare Pages
 
 ```bash
 npm run check                      # 部署前自检，不通过就别上传
-npm run build                      # 产出 dist/site
+npm run build                      # 产出 dist/site（public/ 会摊平到根目录）
 npx wrangler pages project create our-anniversary --production-branch=main
+npx wrangler kv namespace create LOVE_DATA      # 把 id 填进 wrangler.toml
+npm run init-admin                 # 设置管理员密码
 npx wrangler pages deploy dist/site --project-name=our-anniversary --branch=main
 ```
 
-`_headers` 里已经配好 `X-Robots-Tag: noindex`、CSP、`X-Frame-Options` 等安全头。
+`_headers` 里已经配好 `X-Robots-Tag: noindex`、CSP、`X-Frame-Options` 等安全头，
+`/admin/*` 还有更严的一档（禁缓存、`frame-ancestors 'none'`、`X-Frame-Options: DENY`）。
 
 ### 其它平台
 
-`npm run build` 产出的 `dist/site/` 是纯静态目录，扔到 Vercel / Netlify / GitHub Pages / Nginx 都能直接跑。
+`npm run build` 产出的 `dist/site/` 是纯静态目录，扔到 Vercel / Netlify / GitHub Pages / Nginx 都能直接跑
+（但只有 Cloudflare 这类支持 Workers 的平台能用后台；其它平台前台会自动降级到 config 数据）。
 
 ---
 
 ## 开发工具
 
 ```bash
+# 前台
 npm run dev                # 本地预览
 npm run check              # 静态自检（5 项）
 npm run build              # 部署目录
 npm run build:standalone   # 单文件 HTML
 npm run icons              # 重新生成 PWA 图标（需要 Python 3）
+
+# 后台
+npm run init-admin                       # 设置 / 重置管理员密码
+npm run dev:pages                        # 本地完整 Pages 环境（含 Worker + KV）
+npm run smoke:admin -- <url> <密码>       # 后台 API 冒烟（37 项）
+npm run smoke:admin:ui -- <url> <密码>    # 后台界面冒烟（34 项）
 ```
 
-`npm run check` 会检查：HTML id 与 JS 引用是否对齐、import 路径是否可解析、模块语法、静态资源是否齐全、**有没有漏写 import 的跨模块调用**。全部零依赖，用 Node 标准库实现。
+`npm run check` 会检查：HTML id 与 JS 引用是否对齐、import 路径是否可解析、模块语法、静态资源是否齐全、
+**有没有漏写 import 的跨模块调用**，以及后台文件是否齐全、KV 绑定与 Worker 里用的 `env.*` 是否对得上。全部零依赖，用 Node 标准库实现。
 
-`npm run smoke` 会真的启动一个无头 Chrome，打开页面、跑 23 项功能断言、收集控制台错误与失败请求、模拟滚动确认所有进场元素都正常显示，最后输出三张截图。同样零依赖 —— 用 Node 22 内置的 `WebSocket` 直连 CDP，不需要装 playwright。
+`npm run smoke` 会真的启动一个无头 Chrome，打开页面、跑 24 项功能断言、收集控制台错误与失败请求、模拟滚动确认所有进场元素都正常显示，最后输出三张截图。同样零依赖 —— 用 Node 22 内置的 `WebSocket` 直连 CDP，不需要装 playwright。
+
+`npm run smoke:admin` 与 `npm run smoke:admin:ui` 则把后台从鉴权、校验、增删改查到响应式完整跑一遍
+（37 + 34 项断言），既能对本地也能对线上地址执行。
 
 ---
 

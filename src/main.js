@@ -31,6 +31,7 @@ import { initLetter } from './modules/letter.js';
 import { initGallery } from './modules/gallery.js';
 import { initMusic } from './modules/music.js';
 import { initAnniversaries } from './modules/anniversaries.js';
+import { initTopCountdown } from './modules/top-countdown.js';
 import { initTimeline } from './modules/timeline.js';
 import { initDailyQuote } from './modules/daily-quote.js';
 import { initMilestone } from './modules/milestone.js';
@@ -88,6 +89,8 @@ function boot() {
 
   // ---- 内容层 ----
   mount('counter', safe('相爱计时', function () { return initCounter(config); }));
+  // 顶部倒计时条依赖 anniversaries 暴露的 fetchAnniversaries（同向 import，符合分层）
+  mount('topCountdown', safe('顶部倒计时', function () { return initTopCountdown(config); }));
   mount('quote', safe('每日情话', function () { return initDailyQuote(config); }));
   mount('milestone', safe('里程碑进度', function () { return initMilestone(config); }));
   mount('letter', safe('情书', function () { return initLetter(config); }));

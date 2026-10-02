@@ -19,7 +19,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'dist', 'site');
 
-/** 需要进入部署目录的顶层条目 */
+/**
+ * 需要进入部署目录的顶层条目。
+ * public/ 里的内容会被「摊平」到部署根目录 —— 这样 admin/ 落在 /admin/，
+ * _worker.js 落在站点根（Pages 只认根目录下的 _worker.js）。
+ */
 const INCLUDE = [
   'index.html',
   'manifest.webmanifest',
@@ -28,6 +32,12 @@ const INCLUDE = [
   '_headers',
   'src',
   'assets'
+];
+
+/** public/ 下的条目：源路径 → 部署根目录下的目标名 */
+const PUBLIC_INCLUDE = [
+  '_worker.js',
+  'admin'
 ];
 
 function copyRecursive(src, dest) {
@@ -61,6 +71,13 @@ function main() {
   for (const name of INCLUDE) {
     const src = path.join(ROOT, name);
     if (!fs.existsSync(src)) { missing.push(name); continue; }
+    copyRecursive(src, path.join(OUT, name));
+  }
+
+  // public/ 的内容摊平到部署根目录
+  for (const name of PUBLIC_INCLUDE) {
+    const src = path.join(ROOT, 'public', name);
+    if (!fs.existsSync(src)) { missing.push('public/' + name); continue; }
     copyRecursive(src, path.join(OUT, name));
   }
 

@@ -128,12 +128,22 @@ function stripModuleSyntax(code) {
 }
 
 let checked = 0;
-for (const file of jsFiles.concat([path.join(ROOT, 'sw.js')])) {
+/* 需要做语法检查的文件：src 下全部模块 + sw.js + 后台脚本 + 后端 Worker。
+   `_worker.js` 用了 `export default { ... }`，stripModuleSyntax 只处理
+   具名 export，所以额外把 `export default` 也剥掉。 */
+const syntaxTargets = jsFiles.concat([
+  path.join(ROOT, 'sw.js'),
+  path.join(ROOT, 'public', 'admin', 'admin.js'),
+  path.join(ROOT, 'public', '_worker.js')
+].filter((f) => fs.existsSync(f)));
+
+for (const file of syntaxTargets) {
   const rel = path.relative(ROOT, file).split(path.sep).join('/');
   const code = fs.readFileSync(file, 'utf8');
+  const stripped = stripModuleSyntax(code).replace(/^[ \t]*export\s+default\s+/gm, 'var __default__ = ');
   try {
     // eslint-disable-next-line no-new-func
-    new Function(stripModuleSyntax(code));
+    new Function(stripped);
     checked++;
   } catch (err) {
     fail('语法错误：' + rel + '\n      ' + err.message);
@@ -178,11 +188,97 @@ const linkRe = /(?:href|src)="((?!data:|https?:|#)[^"]+)"/g;
 let lm;
 let linkCount = 0;
 while ((lm = linkRe.exec(html))) {
-  const target = path.join(ROOT, lm[1]);
+  const rel = lm[1];
   linkCount++;
-  if (!fs.existsSync(target)) fail('index.html 引用了不存在的文件：' + lm[1]);
+  // 目录链接（以 / 结尾）在构建时会由 public/ 摊平到部署根，
+  // 源码阶段该目录可能不在仓库根下，因此按「根目录 或 public/ 目录」两处找。
+  const candidates = [path.join(ROOT, rel), path.join(ROOT, 'public', rel)];
+  const found = candidates.some((p) => fs.existsSync(p));
+  if (!found) fail('index.html 引用了不存在的文件：' + rel);
 }
 if (errors === 0) ok('index.html 中 ' + linkCount + ' 个本地外链均可解析');
+
+// 后台与后端的关键文件必须存在，否则部署后是「装好的门没有锁」
+const adminRequired = [
+  'public/_worker.js',
+  'public/admin/index.html',
+  'public/admin/admin.css',
+  'public/admin/admin.js'
+];
+const adminMissing = adminRequired.filter((f) => !fs.existsSync(path.join(ROOT, f)));
+if (adminMissing.length) adminMissing.forEach((f) => fail('缺少后台/后端文件：' + f));
+else ok('后台与后端文件齐全（_worker.js + admin 三件套）');
+
+// 后台页面引用的本地资源也要存在。
+// 注意解析基准：部署时 public/ 的内容被摊平到站点根目录，
+// 所以 admin/index.html 里的 ../src/styles/tokens.css 实际指向 <站点根>/src/styles/tokens.css，
+// 也就是源码里的 <ROOT>/src/styles/tokens.css —— 不能按 public/admin/ 去解析。
+const adminHtmlPath = path.join(ROOT, 'public', 'admin', 'index.html');
+if (fs.existsSync(adminHtmlPath)) {
+  const adminHtml = fs.readFileSync(adminHtmlPath, 'utf8');
+  const adminLinkRe = /(?:href|src)="((?!data:|https?:|#)[^"]+)"/g;
+  let am;
+  let adminLinkCount = 0;
+  let adminLinkBad = 0;
+
+  // 模拟部署布局：public/admin/ → 站点根/admin/，public/* → 站点根/*
+  // 因此「相对于 public/ 的路径」就是「相对于站点根的路径」，
+  // 需要映射回源码位置：站点根下的 admin/* 来自 public/admin/*，
+  // 其余（src/、assets/…）来自仓库根目录。
+  const SITE_ROOT = path.join(ROOT, 'public');
+
+  while ((am = adminLinkRe.exec(adminHtml))) {
+    const rel = am[1];
+    adminLinkCount++;
+
+    const resolved = path.resolve(SITE_ROOT, 'admin', rel);   // 站点根下的绝对布局
+    const relToSite = path.relative(SITE_ROOT, resolved);      // 站点根下的相对路径
+
+    let target;
+    if (relToSite === 'admin' || relToSite.startsWith('admin' + path.sep)) {
+      target = resolved;                                       // 后台自身资源
+    } else if (relToSite === '_worker.js') {
+      target = resolved;
+    } else {
+      target = path.join(ROOT, relToSite);                     // 前台共享资源
+    }
+
+    if (!fs.existsSync(target)) {
+      fail('后台页面引用了不存在的文件：' + rel + '（解析为 ' + path.relative(ROOT, target) + '）');
+      adminLinkBad++;
+    }
+  }
+
+  if (!adminLinkBad) ok('后台页面中 ' + adminLinkCount + ' 个本地外链均可解析');
+}
+
+// wrangler.toml 的 KV binding 必须与 _worker.js 里使用的 env.* 对得上
+const wranglerPath = path.join(ROOT, 'wrangler.toml');
+const workerPath = path.join(ROOT, 'public', '_worker.js');
+if (fs.existsSync(wranglerPath) && fs.existsSync(workerPath)) {
+  const wConf = fs.readFileSync(wranglerPath, 'utf8');
+  const wCode = fs.readFileSync(workerPath, 'utf8');
+
+  const bindings = [];
+  const bindRe = /binding\s*=\s*"([A-Z_][A-Z0-9_]*)"/g;
+  let bm;
+  while ((bm = bindRe.exec(wConf))) bindings.push(bm[1]);
+
+  const used = new Set();
+  const useRe = /\benv\.([A-Z_][A-Z0-9_]*)/g;
+  let um;
+  while ((um = useRe.exec(wCode))) used.add(um[1]);
+
+  const unbound = [...used].filter((n) => n !== 'ASSETS' && bindings.indexOf(n) === -1);
+  if (unbound.length) {
+    fail('_worker.js 使用了未绑定的 env 变量：' + unbound.join(', ') +
+         '（wrangler.toml 中已有的 binding：' + (bindings.join(', ') || '无') + '）');
+  } else {
+    ok('KV 绑定与 Worker 用法一致（' + (bindings.join(', ') || '无绑定') + '）');
+  }
+} else if (!fs.existsSync(wranglerPath)) {
+  warn('未找到 wrangler.toml，KV 需在 Cloudflare Dashboard 手动绑定');
+}
 
 /* ---------------------------------------------------------------- ⑤ 符号绑定 */
 console.log('\n  【5/5】跨模块符号绑定（漏 import 检查）');

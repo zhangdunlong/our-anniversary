@@ -1,0 +1,23 @@
+# ============================================================================
+#  wrangler.toml —— Cloudflare Pages 项目配置
+# ============================================================================
+#  pages_build_output_dir 让 wrangler 识别这是一个 Pages 项目，
+#  KV 绑定在 `wrangler pages deploy` 时会一并生效（无需在 Dashboard 手动绑定）。
+#
+#  注意 TOML 的「表作用域」规则：字段从属于它前面最近的 [table] / [[array-of-table]]。
+#  所以顶层字段（name / compatibility_date 等）必须写在第一个 [table] 之前，
+#  否则会被解析成属于那个表 —— wrangler 会报 "Unexpected fields found"。
+# ============================================================================
+
+name = "our-anniversary"
+pages_build_output_dir = "dist/site"
+compatibility_date = "2024-09-23"
+
+# WebCrypto（crypto.subtle）在 Workers 里是内置的，无需额外 flag
+compatibility_flags = []
+
+# ------------------------------------------------------------------ KV 绑定
+# _worker.js 里通过 env.LOVE_DATA 访问
+[[kv_namespaces]]
+binding = "LOVE_DATA"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
