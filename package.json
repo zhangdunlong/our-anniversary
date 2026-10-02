@@ -29,7 +29,7 @@
     "desensitize": "node scripts/desensitize.mjs",
     "init-admin": "node scripts/init-admin.mjs",
     "admin:check": "node scripts/init-admin.mjs --check",
-    "dev:pages": "npm run build && wrangler pages dev dist/site --kv LOVE_DATA",
+    "dev:pages": "npm run build && wrangler pages dev dist/site",
     "deploy": "npm run build && wrangler pages deploy dist/site --project-name=our-anniversary --branch=main"
   },
   "dependencies": {},

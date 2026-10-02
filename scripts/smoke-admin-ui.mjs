@@ -120,6 +120,39 @@ async function connect(wsUrl) {
   return new CDP(ws);
 }
 
+/**
+ * 用 API 把密码改回去，并处理服务端的防抖冷却（429 + Retry-After）。
+ *
+ * 为什么不继续在界面上点：界面测试要断言的是「入口 / 校验 / 提示 / 强制登出」，
+ * 而「还原环境」只是善后。善后放在 CLI 侧可以精确读 Retry-After、按需等待、
+ * 失败时拿到明确错误码 —— 比在浏览器里反复点可靠得多。
+ */
+async function restorePasswordViaApi(token, oldPw, newPw) {
+  if (!token) return { ok: false, detail: '未取到 token' };
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const res = await fetch(BASE + '/api/admin/password', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + token },
+      body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw })
+    });
+    if (res.status === 200) return { ok: true, detail: '' };
+
+    let body = null;
+    try { body = await res.json(); } catch (e) { body = null; }
+    const code = (body && body.error && body.error.code) || '';
+
+    if (res.status === 429) {
+      const wait = Number(res.headers.get('retry-after')) || 16;
+      console.log('    ⏳ 还原时命中 ' + code + '，等待 ' + wait + ' 秒…');
+      await sleep((wait + 1) * 1000);
+      continue;
+    }
+    return { ok: false, detail: 'HTTP ' + res.status + (code ? ' ' + code : '') };
+  }
+  return { ok: false, detail: '重试 5 次仍失败' };
+}
+
 /* ---------------------------------------------------------------- 主流程 */
 
 async function main() {
@@ -441,6 +474,43 @@ async function main() {
     await cdp.screenshot(path.join(SHOT_DIR, 'admin-front-topcountdown.png'));
     console.log('      → 截图 admin-front-topcountdown.png');
 
+    /* --- 清理本套用例产生的数据，避免污染真实 KV --- */
+    // 从 Node 侧顺序删除：后台的 DELETE 是「读-改-写」，
+    // 并发删除会互相覆盖（丢更新），所以必须一条一条来。
+    const adminToken = await cdp.eval('return localStorage.getItem("love-admin-token") || "";');
+    const JUNK_PREFIX = ['联动测试-', 'UI测试-', '冒烟测试-', '冒烟-MMDD-'];
+    const isJunk = (x) => JUNK_PREFIX.some((p) => String(x.name || '').indexOf(p) === 0);
+
+    async function fetchAdmin() {
+      const r = await fetch(BASE + '/api/admin/anniversaries', {
+        headers: { authorization: 'Bearer ' + adminToken }
+      });
+      return r.json();
+    }
+
+    let cleanedCount = 0;
+    if (adminToken) {
+      for (let pass = 0; pass < 4; pass++) {
+        const snap = await fetchAdmin();
+        const junk = (snap.data || []).filter(isJunk);
+        if (!junk.length) break;
+        for (const it of junk) {
+          await fetch(BASE + '/api/admin/anniversaries/' + encodeURIComponent(it.id), {
+            method: 'DELETE', headers: { authorization: 'Bearer ' + adminToken }
+          });
+          cleanedCount++;
+        }
+      }
+    }
+
+    check('测试数据已自动清理（不在 KV 里留残留）', cleanedCount >= 1,
+      adminToken ? '清理了 ' + cleanedCount + ' 条' : '未取到 token');
+
+    const finalSnap = adminToken ? await fetchAdmin() : { data: [] };
+    const leftover = (finalSnap.data || []).filter(isJunk);
+    check('清理后 KV 中确无测试残留', leftover.length === 0,
+      '仍残留 ' + leftover.length + ' 条：' + leftover.map((x) => x.name).join(', '));
+
     /* ================= H. 响应式 ================= */
     console.log('\n  【H】移动端响应式');
 
@@ -469,8 +539,194 @@ async function main() {
 
     await cdp.send('Emulation.clearDeviceMetricsOverride');
 
-    /* ================= I. 控制台干净 ================= */
-    console.log('\n  【I】运行环境');
+    /* ================= I. 修改密码 ================= */
+    console.log('\n  【I】修改密码界面');
+
+    // 前面的用例可能已经把会话换成别的状态，这里重新登录一次拿干净的起点
+    await cdp.eval('try{localStorage.removeItem("love-admin-token");}catch(e){}');
+    await cdp.send('Page.navigate', { url: BASE + '/admin/' });
+    await sleep(1800);
+    await cdp.eval(
+      'document.getElementById("login-password").value = ' + JSON.stringify(PASSWORD) + ';' +
+      'document.getElementById("login-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+    );
+    await sleep(2400);
+
+    const entryVisible = await cdp.eval(
+      'var b=document.getElementById("pwd-btn");' +
+      'return !!b && getComputedStyle(b).display !== "none" && b.getBoundingClientRect().width > 0;'
+    );
+    check('后台顶部有可点击的「修改密码」入口', entryVisible === true);
+
+    await cdp.eval('document.getElementById("pwd-btn").click();');
+    await sleep(600);
+    const pwdModalOpen = await cdp.eval('return document.getElementById("pwd-modal").hidden === false;');
+    check('点击入口后弹出改密码对话框', pwdModalOpen === true);
+
+    const threeMasked = await cdp.eval(
+      'var ids=["pwd-old","pwd-new","pwd-confirm"];' +
+      'return ids.every(function(id){var e=document.getElementById(id);return !!e && e.type==="password";});'
+    );
+    check('三个密码框默认都是掩码', threeMasked === true);
+
+    /* --- 显示 / 隐藏切换 --- */
+    await cdp.eval('document.querySelectorAll(".pw-toggle")[0].click();');
+    await sleep(250);
+    const revealed = await cdp.eval('return document.getElementById("pwd-old").type === "text";');
+    check('点击 👁 后密码变为明文', revealed === true);
+
+    await cdp.eval('document.querySelectorAll(".pw-toggle")[0].click();');
+    await sleep(250);
+    const remasked = await cdp.eval('return document.getElementById("pwd-old").type === "password";');
+    check('再次点击恢复掩码', remasked === true);
+
+    /* --- 强度指示条 --- */
+    await cdp.eval(
+      'var i=document.getElementById("pwd-new");i.value="abc";' +
+      'i.dispatchEvent(new Event("input",{bubbles:true}));'
+    );
+    await sleep(250);
+    const weakLevel = await cdp.eval('return document.getElementById("pwd-meter").getAttribute("data-level");');
+    const weakText = await cdp.eval('return document.getElementById("pwd-strength").textContent;');
+    check('弱密码 → 强度条 1 格', weakLevel === '1', 'level=' + weakLevel);
+    check('弱密码 → 文案提示强度弱', weakText.indexOf('弱') > -1, '"' + weakText + '"');
+
+    await cdp.eval(
+      'var i=document.getElementById("pwd-new");i.value="Str0ng-Pass!";' +
+      'i.dispatchEvent(new Event("input",{bubbles:true}));'
+    );
+    await sleep(250);
+    const strongLevel = await cdp.eval('return document.getElementById("pwd-meter").getAttribute("data-level");');
+    check('强密码 → 强度条 4 格', strongLevel === '4', 'level=' + strongLevel);
+
+    await cdp.screenshot(path.join(SHOT_DIR, 'admin-pwd-modal.png'));
+    console.log('      → 截图 admin-pwd-modal.png');
+
+    /* --- 校验：两次输入不一致 --- */
+    await cdp.eval(
+      'document.getElementById("pwd-old").value = ' + JSON.stringify(PASSWORD) + ';' +
+      'document.getElementById("pwd-new").value = "Str0ng-Pass!";' +
+      'document.getElementById("pwd-confirm").value = "Str0ng-Pass?!";' +
+      'document.getElementById("pwd-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+    );
+    await sleep(600);
+    const mismatchErr = await cdp.eval('return document.getElementById("err-pwd-confirm").textContent;');
+    check('两次新密码不一致 → 提示不一致', mismatchErr.indexOf('不一致') > -1, '"' + mismatchErr + '"');
+
+    /* --- 校验：新密码太弱 --- */
+    await cdp.eval(
+      'document.getElementById("pwd-old").value = ' + JSON.stringify(PASSWORD) + ';' +
+      'document.getElementById("pwd-new").value = "abcdefgh";' +
+      'document.getElementById("pwd-confirm").value = "abcdefgh";' +
+      'document.getElementById("pwd-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+    );
+    await sleep(600);
+    const weakErr = await cdp.eval('return document.getElementById("err-pwd-new").textContent;');
+    check('单一字符类别的新密码被拦下', weakErr.length > 0, '"' + weakErr + '"');
+
+    /* --- 原密码错误 --- */
+    await cdp.eval(
+      'document.getElementById("pwd-old").value = "definitely-wrong-old-pw";' +
+      'document.getElementById("pwd-new").value = "Str0ng-Pass!";' +
+      'document.getElementById("pwd-confirm").value = "Str0ng-Pass!";' +
+      'document.getElementById("pwd-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+    );
+    await sleep(2600);
+    const oldErr = await cdp.eval('return document.getElementById("err-pwd-old").textContent;');
+    check('原密码错误 → 该字段下方显示提示', oldErr.length > 0, '"' + oldErr + '"');
+    const stillOpen = await cdp.eval('return document.getElementById("pwd-modal").hidden === false;');
+    check('原密码错误时对话框保持打开', stillOpen === true);
+
+    /* --- 成功修改（并验证强制登出）--- */
+    const UI_NEW_PW = 'UiTest' + Date.now() + '!aZ';
+
+    /**
+     * 在界面上提交改密码表单。
+     * 改密成功后前端会强制登出 → 回到登录页，这就是「成功」的判据。
+     * 提示条 3.2 秒后会自动消失，所以这里边等边轮询，避免因慢网络而漏判。
+     */
+    async function submitPwdForm(oldPw, newPw) {
+      await cdp.eval('document.getElementById("pwd-btn").click();');
+      await sleep(500);
+      const modalUp = await cdp.eval('return document.getElementById("pwd-modal").hidden === false;');
+      if (!modalUp) return { changed: false, sawToast: false, msg: '对话框未打开' };
+
+      await cdp.eval(
+        'document.getElementById("pwd-old").value = ' + JSON.stringify(oldPw) + ';' +
+        'document.getElementById("pwd-new").value = ' + JSON.stringify(newPw) + ';' +
+        'document.getElementById("pwd-confirm").value = ' + JSON.stringify(newPw) + ';' +
+        'document.getElementById("pwd-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+      );
+
+      let changed = false;
+      let sawToast = false;
+      let lastMsg = '';
+
+      for (let i = 0; i < 35; i++) {
+        await sleep(200);
+        const st = await cdp.eval(
+          'var ts=document.querySelectorAll("#toast-host .toast");' +
+          'return {' +
+          '  loggedOut: document.getElementById("view-login").hidden === false,' +
+          '  toast: Array.prototype.some.call(ts,function(x){return x.textContent.indexOf("密码")>-1;}),' +
+          '  msg: ts.length ? ts[ts.length-1].textContent : ""' +
+          '};'
+        );
+        if (!st) continue;
+        if (st.toast) sawToast = true;
+        if (st.msg) lastMsg = st.msg;
+        if (st.loggedOut) { changed = true; break; }
+      }
+      return { changed: changed, sawToast: sawToast, msg: lastMsg };
+    }
+
+    let result = await submitPwdForm(PASSWORD, UI_NEW_PW);
+
+    // 可能撞上服务端的 15 秒防抖冷却（上一个测试脚本刚改过密码）→ 等一等再来
+    for (let retry = 0; retry < 2 && !result.changed; retry++) {
+      console.log('    ⏳ 首次未生效（' + (result.msg || '无提示') + '），等待 18 秒后重试…');
+      await sleep(18000);
+      await cdp.eval('try{document.getElementById("pwd-cancel").click();}catch(e){}');
+      await sleep(400);
+      result = await submitPwdForm(PASSWORD, UI_NEW_PW);
+    }
+
+    check('原密码正确 → 改密成功并自动回到登录页', result.changed === true, result.msg);
+    check('显示改密成功提示条', result.sawToast === true, result.msg);
+
+    const tokenCleared = await cdp.eval('return !localStorage.getItem("love-admin-token");');
+    check('改密后本地登录态已清除', tokenCleared === true);
+
+    /* --- 新密码可登录 --- */
+    await cdp.eval(
+      'document.getElementById("login-password").value = ' + JSON.stringify(UI_NEW_PW) + ';' +
+      'document.getElementById("login-form").dispatchEvent(new Event("submit",{cancelable:true,bubbles:true}));'
+    );
+    await sleep(2800);
+    const loginWithNew = await cdp.eval('return document.getElementById("view-admin").hidden === false;');
+    check('可以用新密码登录', loginWithNew === true);
+
+    /* --- 还原环境：用生效中的 token 走 API 改回原密码 --- */
+    const restoreToken = await cdp.eval('return localStorage.getItem("love-admin-token") || "";');
+    const restore = await restorePasswordViaApi(restoreToken, UI_NEW_PW, PASSWORD);
+    check('已把密码改回原值（环境还原）', restore.ok === true, restore.detail);
+
+    const relogin = await fetch(BASE + '/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: PASSWORD })
+    });
+    check('原密码恢复可用', relogin.status === 200, 'HTTP ' + relogin.status);
+
+    const staleLogin = await fetch(BASE + '/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: UI_NEW_PW })
+    });
+    check('临时新密码已失效', staleLogin.status === 401, 'HTTP ' + staleLogin.status);
+
+    /* ================= J. 控制台干净 ================= */
+    console.log('\n  【J】运行环境');
 
     check('无未捕获异常', cdp.exceptions.length === 0,
       cdp.exceptions.slice(0, 2).join(' | '));

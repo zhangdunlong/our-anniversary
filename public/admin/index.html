@@ -76,6 +76,7 @@
 
       <button class="btn btn--icon" id="theme-btn" type="button" title="切换主题">🌙</button>
       <button class="btn btn--icon" id="refresh-btn" type="button" title="刷新列表">↻</button>
+      <button class="btn btn--icon" id="pwd-btn" type="button" title="修改登录密码" aria-label="修改登录密码">🔑</button>
       <button class="btn btn--ghost" id="logout-btn" type="button">退出登录</button>
     </header>
 
@@ -204,6 +205,69 @@
         <div class="modal-foot">
           <button class="btn" type="button" id="edit-cancel">取消</button>
           <button class="btn btn--primary" type="submit" id="edit-save">保存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       模态框：修改登录密码
+       ============================================================ -->
+  <div class="modal" id="pwd-modal" hidden role="dialog" aria-modal="true" aria-labelledby="pwd-title">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="pwd-title">修改登录密码</h3>
+        <button class="modal-close" type="button" id="pwd-close" aria-label="关闭">✕</button>
+      </div>
+
+      <form id="pwd-form" novalidate autocomplete="off">
+        <div class="modal-body">
+          <p class="notice">
+            <span aria-hidden="true">🔒</span>
+            <span>修改成功后，<b>所有设备上的登录状态都会失效</b>，需要用新密码重新登录。</span>
+          </p>
+
+          <div class="field">
+            <label class="field-label" for="pwd-old">当前密码<span class="req">*</span></label>
+            <div class="pw-wrap">
+              <input class="input" type="password" id="pwd-old" name="oldPassword"
+                     autocomplete="current-password" required>
+              <button class="pw-toggle" type="button" data-toggle="pwd-old"
+                      aria-label="显示当前密码" aria-pressed="false">👁</button>
+            </div>
+            <p class="field-error" id="err-pwd-old" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="pwd-new">新密码<span class="req">*</span></label>
+            <div class="pw-wrap">
+              <input class="input" type="password" id="pwd-new" name="newPassword" maxlength="64"
+                     autocomplete="new-password" required>
+              <button class="pw-toggle" type="button" data-toggle="pwd-new"
+                      aria-label="显示新密码" aria-pressed="false">👁</button>
+            </div>
+            <div class="pw-meter" id="pwd-meter" data-level="0" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <p class="field-hint" id="pwd-strength">至少 8 位，需包含大写字母、小写字母、数字、符号中的至少两类</p>
+            <p class="field-error" id="err-pwd-new" role="alert"></p>
+          </div>
+
+          <div class="field">
+            <label class="field-label" for="pwd-confirm">确认新密码<span class="req">*</span></label>
+            <div class="pw-wrap">
+              <input class="input" type="password" id="pwd-confirm" name="confirmPassword" maxlength="64"
+                     autocomplete="new-password" required>
+              <button class="pw-toggle" type="button" data-toggle="pwd-confirm"
+                      aria-label="显示确认密码" aria-pressed="false">👁</button>
+            </div>
+            <p class="field-error" id="err-pwd-confirm" role="alert"></p>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <button class="btn" type="button" id="pwd-cancel">取消</button>
+          <button class="btn btn--primary" type="submit" id="pwd-save">确认修改</button>
         </div>
       </form>
     </div>

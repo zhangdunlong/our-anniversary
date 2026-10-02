@@ -321,6 +321,97 @@ body::before {
 
 .switch-text { font-size: 13px; color: var(--text-soft); }
 
+/* ---------------------------------------------------------------- 提示块 */
+/* 用于「改密码会退出所有设备」这类需要用户先读再操作的说明 */
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 var(--space-md);
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-soft);
+  background: var(--glass-bg-hover);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+}
+
+.notice b { color: var(--text-strong); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 密码输入框 */
+/* 右侧留出「显示/隐藏」按钮的空间，避免输入文字被按钮压住 */
+
+.pw-wrap { position: relative; }
+
+.pw-wrap .input {
+  padding-right: 44px;
+  /* 密码框不要被浏览器/输入法自动大写 */
+  text-transform: none;
+}
+
+.pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+
+.pw-toggle:hover { color: var(--text-strong); background: var(--glass-bg-hover); }
+
+.pw-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* 已显示密码时高亮，避免用户以为没生效 */
+.pw-toggle[aria-pressed='true'] { color: var(--primary); }
+
+/* ---------------------------------------------------------------- 密码强度条 */
+
+.pw-meter {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.pw-meter span {
+  flex: 1 1 0;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-border-strong);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.pw-meter[data-level='1'] span:nth-child(1) { background: #d64545; }
+.pw-meter[data-level='2'] span:nth-child(-n + 2) { background: #e08a2f; }
+.pw-meter[data-level='3'] span:nth-child(-n + 3) { background: #d4a017; }
+.pw-meter[data-level='4'] span { background: #3fbf7f; }
+
+/* 强度文案跟着等级变色，弱密码一眼可见 */
+.pw-strength-1 { color: #ff7a7a !important; }
+.pw-strength-2 { color: #e0a34f !important; }
+.pw-strength-3 { color: #d4a017 !important; }
+.pw-strength-4 { color: #4fd197 !important; }
+
+[data-theme='dawn'] .pw-strength-3 { color: #a8790a !important; }
+[data-theme='dawn'] .pw-strength-4 { color: #2f9c68 !important; }
+
 /* ---------------------------------------------------------------- 登录页 */
 
 .login-wrap {
@@ -768,6 +859,10 @@ body::before {
   .toolbar .select { flex: 1 1 auto; }
 
   .field-row { grid-template-columns: 1fr; gap: 0; }
+
+  /* 触控目标放大到 ≥38px，避免手机上点不准「显示密码」 */
+  .pw-toggle { width: 38px; height: 38px; font-size: 15px; }
+  .pw-wrap .input { padding-right: 48px; }
 
   .modal-card {
     max-height: calc(100dvh - 24px);

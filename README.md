@@ -40,6 +40,7 @@
 | 功能 | 说明 |
 | --- | --- |
 | 独立登录页 | 管理员密码认证，未登录不能访问任何管理页面，支持退出登录 |
+| 修改登录密码 | 顶栏 🔑 打开弹窗，需验证原密码；带明文切换、实时强度条、逐字段错误提示；成功后自动退出登录，旧密码立即失效 |
 | 纪念日增删改查 | 列表展示，支持按日期 / 创建时间 / 名称排序，支持关键词搜索与显示状态筛选 |
 | 字段完整 | 名称、日期、类型（生日 / 恋爱纪念日 / 节日 / 纪念日 / 其它）、备注、图标、是否显示在首页、是否每年重复 |
 | 数据校验 | 前后端同一套规则：日期必须真实存在（`2023-02-29` 会被拒）、名称不能为空；操作有明确成功 / 失败提示 |
@@ -117,21 +118,34 @@ npx wrangler pages deploy dist/site --project-name=our-anniversary --branch=main
 浏览器
   ├── /                前台纪念页
   │     └── GET /api/anniversaries   ← 读后台维护的纪念日
-  ├── /admin/          后台管理页
-  │     └── /api/login · /api/logout · /api/admin/anniversaries[/:id]
+  ├── /admin/          后台管理页（登录 + CRUD + 修改密码）
+  │     └── /api/login · /api/logout · /api/admin/password · /api/admin/anniversaries[/:id]
   └── 其余一切 → 静态资源
                     ▲
-              _worker.js（单一 Worker，约 470 行）
+              _worker.js（单一 Worker，约 890 行）
                     │
               Cloudflare KV
-                ├── anniversaries    纪念日数组
-                ├── admin:password   "salt:sha256(salt+password)"
-                └── token:<value>    登录令牌（7 天 TTL）
+                ├── anniversaries       纪念日数组
+                ├── admin:password      "pbkdf2$<迭代次数>$<盐hex>$<哈希hex>"
+                ├── admin:tokenEpoch    令牌世代（改密时轮换 → 旧 token 集体失效）
+                ├── admin:pwdChangedAt  上次改密时间（防抖冷却用）
+                ├── token:<value>       登录令牌（值为签发时的 epoch，7 天 TTL）
+                └── rl:<scope>:<ip>     失败计数（软限流）
 ```
 
-**安全设计**：密码只以 `sha256(salt + password)` 形式存进 KV，永不落盘、永不进仓库；
+**安全设计**：密码用 **PBKDF2-SHA256**（默认 10 000 次迭代）派生后存入 KV，**永不落盘、永不进仓库**；
+哈希串自带版本前缀（`pbkdf2$…`），旧版 `salt:sha256(...)` 会在登录成功时自动重算升级；
 校验用恒定时间比较防时序攻击；登录签发 32 字节随机 token，带 TTL，过期自动清除；
+**改密码会轮换令牌世代**，所有旧 token 立即失效（不依赖遍历删除，因为 KV 的 list 是最终一致的）；
+登录与改密共用按 IP 的失败限流（窗口 300 s / 上限 8 次），改密另有 15 s 冷却；
 所有写操作强制鉴权；错误文案不区分「密码错」与「账号不存在」。
+
+> **关于迭代次数**：Workers 免费版每请求只有 10 ms CPU，迭代次数调太高会直接触发 Error 1102。
+> 默认取 10 000（本机实测约 1.5 ms）。付费版可在 `wrangler.toml` 的 `[vars] PBKDF2_ITERATIONS`
+> 单调调到 600 000（OWASP 对 PBKDF2-SHA256 的建议值），无需改代码。
+
+**关于缓存**：`sw.js` 对 `/api/*` **完全不接管**（直接走网络）。否则后台会读到过期数据，
+且含鉴权信息的响应会被长期写进 Cache Storage。
 
 **降级策略**：前台读取数据是三级兜底 —— 后台 API → `site.config.js` 的 `anniversaries.custom` → 内置公共节日。
 任何网络异常都被静默吞掉，用户看到的永远是内容而不是加载失败。所以**后台挂了，前台照常可用**。
@@ -152,9 +166,9 @@ npx wrangler pages deploy dist/site --project-name=our-anniversary --branch=main
 ├── public/                       ★ 会被摊平到部署根目录
 │   ├── _worker.js                后端：API + KV + 鉴权（不想用后台可以删掉整个 public/）
 │   └── admin/                    后台管理页
-│       ├── index.html            登录视图 + 管理视图 + 两个模态框
+│       ├── index.html            登录视图 + 管理视图 + 三个模态框（新增/编辑、删除确认、修改密码）
 │       ├── admin.css             后台样式（复用前台 tokens.css）
-│       └── admin.js              API 层 / 状态 / 渲染 / 校验 / 事件
+│       └── admin.js              API 层 / 状态 / 渲染 / 校验 / 强度评估 / 事件
 │
 ├── src/
 │   ├── config/
@@ -200,11 +214,11 @@ npx wrangler pages deploy dist/site --project-name=our-anniversary --branch=main
 │
 └── scripts/                      开发工具（零依赖，全部用 Node 标准库）
     ├── dev-server.mjs            本地静态服务器
-    ├── check.mjs                 静态自检（id 对齐 / import 解析 / 语法 / 漏 import / KV 绑定）
+    ├── check.mjs                 静态自检 5 项 / 13 条校验（id 对齐 / import 解析 / 语法 / 漏 import / KV 绑定 / 密码规则一致）
     ├── smoke.mjs                 真实浏览器端到端冒烟（直连 CDP，不用 playwright）
-    ├── smoke-admin.mjs           后台 API 冒烟（37 项断言）
-    ├── smoke-admin-ui.mjs        后台界面冒烟（34 项断言，真实浏览器）
-    ├── init-admin.mjs            初始化管理员密码 → 写入 KV
+    ├── smoke-admin.mjs           后台 API 冒烟（58 项断言，--with-ratelimit 追加 5 项限流断言）
+    ├── smoke-admin-ui.mjs        后台界面冒烟（55 项断言，真实浏览器，结束自动清理测试数据）
+    ├── init-admin.mjs            初始化 / 重置管理员密码 → PBKDF2 哈希写入 KV
     ├── build-site.mjs            产出干净的部署目录
     ├── build-standalone.mjs      自研微型打包器 → 单文件 HTML
     └── gen-icons.py              纯 Python 生成 PWA 图标（不用 Pillow）
@@ -294,19 +308,24 @@ npm run build:standalone   # 单文件 HTML
 npm run icons              # 重新生成 PWA 图标（需要 Python 3）
 
 # 后台
-npm run init-admin                       # 设置 / 重置管理员密码
+npm run init-admin                       # 设置 / 重置管理员密码（不走 Worker，不吊销会话）
+npm run admin:check                      # 只检查密码是否已初始化
 npm run dev:pages                        # 本地完整 Pages 环境（含 Worker + KV）
-npm run smoke:admin -- <url> <密码>       # 后台 API 冒烟（37 项）
-npm run smoke:admin:ui -- <url> <密码>    # 后台界面冒烟（34 项）
+npm run smoke:admin -- <url> <密码>       # 后台 API 冒烟（58 项）
+npm run smoke:admin -- <url> <密码> --with-ratelimit   # 追加 5 项限流断言（63 项）
+npm run smoke:admin:ui -- <url> <密码>    # 后台界面冒烟（55 项）
 ```
 
 `npm run check` 会检查：HTML id 与 JS 引用是否对齐、import 路径是否可解析、模块语法、静态资源是否齐全、
-**有没有漏写 import 的跨模块调用**，以及后台文件是否齐全、KV 绑定与 Worker 里用的 `env.*` 是否对得上。全部零依赖，用 Node 标准库实现。
+**有没有漏写 import 的跨模块调用**，以及后台文件是否齐全、KV 绑定与 Worker 里用的 `env.*` 是否对得上、
+**后台 JS 引用的元素 id 是否都存在于后台页面**、**密码长度规则前后端是否一致**。全部零依赖，用 Node 标准库实现。
 
 `npm run smoke` 会真的启动一个无头 Chrome，打开页面、跑 24 项功能断言、收集控制台错误与失败请求、模拟滚动确认所有进场元素都正常显示，最后输出三张截图。同样零依赖 —— 用 Node 22 内置的 `WebSocket` 直连 CDP，不需要装 playwright。
 
-`npm run smoke:admin` 与 `npm run smoke:admin:ui` 则把后台从鉴权、校验、增删改查到响应式完整跑一遍
-（37 + 34 项断言），既能对本地也能对线上地址执行。
+`npm run smoke:admin` 与 `npm run smoke:admin:ui` 则把后台从鉴权、校验、增删改查、**修改密码全链路**
+到响应式完整跑一遍（58 + 55 项断言），既能对本地也能对线上地址执行。
+界面冒烟在结束时会自动串行清理自己写入的测试数据 —— 后台的删除接口是「读-改-写」，
+并行删除会互相覆盖，所以清理必须串行。
 
 ---
 

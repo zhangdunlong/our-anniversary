@@ -16,6 +16,24 @@ compatibility_date = "2024-09-23"
 # WebCrypto（crypto.subtle）在 Workers 里是内置的，无需额外 flag
 compatibility_flags = []
 
+# ------------------------------------------------------------------ 运行时变量
+# 这些值会作为 env.XXX 注入 _worker.js。全部有代码内默认值，
+# 删掉任何一项都不会导致报错，只是回落到默认。
+[vars]
+# 密码哈希（PBKDF2-SHA256）迭代次数。
+# ⚠ 这是纯 CPU 开销，直接吃 Workers 的 CPU 配额：
+#     · Free 计划每请求只有 10ms CPU —— 100000 次迭代约需 20~35ms，必触发 Error 1102
+#     · Paid 计划默认 30s CPU —— 可以放心调到 600000（OWASP 对 PBKDF2-SHA256 的建议值）
+#   本机实测（Ryzen 7800X3D）：10000 次 ≈ 1.5ms，50000 次 ≈ 6.8ms，100000 次 ≈ 13.4ms
+PBKDF2_ITERATIONS = "10000"
+
+# 失败限流：同一 IP 在窗口内允许的失败次数 / 窗口长度（秒）
+RATE_LIMIT_MAX_FAILS = "8"
+RATE_LIMIT_WINDOW_SECONDS = "300"
+
+# 改密码成功后的冷却时间（秒），防止脚本化高频改密
+PWD_CHANGE_COOLDOWN_SECONDS = "15"
+
 # ------------------------------------------------------------------ KV 绑定
 # _worker.js 里通过 env.LOVE_DATA 访问
 [[kv_namespaces]]

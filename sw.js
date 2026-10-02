@@ -6,12 +6,18 @@
         这样部署新版后用户刷新立刻拿到新内容，断网时也能打开。
      · 静态资源（CSS / JS / 音频 / 图标）→ 缓存优先 + 后台更新。
         首屏零请求、秒开；同时后台静默拉新，下次访问即最新。
-     · 只处理同源 GET 请求，不碰任何跨域 / 非 GET 请求。
+     · /api/* → **完全不接管**，直接交给网络。
+        这些响应是动态的、可能带鉴权信息：
+          - 被缓存 → 后台列表可能读到旧数据（父级 fetch 的 cache:'no-store'
+            拦不住 SW 的 caches.match，两者是两套机制）；
+          - 被写入 Cache Storage → 等于把「含隐藏条目的后台数据」落盘留存，
+            登出之后仍然存在。
+        只处理同源 GET 请求，不碰任何跨域 / 非 GET 请求。
 
    缓存版本号：改动静态资源后把 VERSION 加一，即可强制全量更新。
    ========================================================================== */
 
-const VERSION = 'v1.0.0';
+const VERSION = 'v1.1.0';
 const CACHE_NAME = 'love-' + VERSION;
 
 // 预缓存清单：首屏必需的最小集合
@@ -93,6 +99,11 @@ self.addEventListener('fetch', function (event) {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;   // 只接管同源
+
+  // API 响应是动态的、且可能含鉴权数据 —— 一律不接管，让浏览器直接走网络。
+  // 注意：父级 fetch 传 cache:'no-store' 并不能阻止 SW 的 caches.match 命中，
+  // 两者是独立的缓存层，所以必须在这里显式放行。
+  if (url.pathname.indexOf('/api/') === 0) return;
 
   // 音频走「仅缓存 + 网络」，不做预缓存（体积大，按需缓存即可）
   const isNavigation = req.mode === 'navigate' ||

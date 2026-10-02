@@ -27,13 +27,27 @@ const API = {
   list: '/api/anniversaries',
   login: '/api/login',
   logout: '/api/logout',
-  admin: '/api/admin/anniversaries'
+  admin: '/api/admin/anniversaries',
+  password: '/api/admin/password'
 };
 
 const TOKEN_KEY = 'love-admin-token';
 
 /** 与后端 validateItem 保持同一套规则 —— 改规则时两边都要动 */
 const LIMITS = { name: 30, note: 100 };
+
+/** 与后端 validatePasswordStrength 保持同一套规则 —— 改规则时两边都要动 */
+const PWD_MIN = 8;
+const PWD_MAX = 64;
+
+/** 强度条文案（索引 = scorePassword 的返回值） */
+const STRENGTH_LABEL = {
+  0: '至少 8 位，需包含大写字母、小写字母、数字、符号中的至少两类',
+  1: '强度：弱 —— 至少 8 位，并混用多种字符',
+  2: '强度：一般 —— 再长一些会更安全',
+  3: '强度：较强',
+  4: '强度：强'
+};
 
 const TYPE_LABEL = {
   birthday: '生日',
@@ -278,6 +292,132 @@ function focusFirstError(errors) {
       return;
     }
   }
+}
+
+/* ==========================================================================
+   密码强度与改密码校验
+   ========================================================================== */
+
+/** 改密码表单的三个字段（DOM id 后缀 / state key 共用） */
+const PWD_FIELDS = ['old', 'new', 'confirm'];
+
+/** 统计密码包含的字符类别数（小写/大写/数字/符号） */
+function countKinds(pwd) {
+  let kinds = 0;
+  if (/[a-z]/.test(pwd)) kinds++;
+  if (/[A-Z]/.test(pwd)) kinds++;
+  if (/[0-9]/.test(pwd)) kinds++;
+  if (/[^A-Za-z0-9]/.test(pwd)) kinds++;
+  return kinds;
+}
+
+/**
+ * 一眼就能猜到的规律片段：连号、键盘序、重复字符。
+ * 命中不阻止提交（准入规则由 validatePasswordForm 决定），只是把强度分压低，
+ * 避免 "Abcd1234" 这种被标成「强」——评分虚高比不给分更糟。
+ */
+const OBVIOUS_PATTERN = /(0123|1234|2345|3456|4567|5678|6789|7890|abcd|bcde|cdef|qwer|asdf|zxcv|0000|1111|2222|123456|654321)/i;
+
+/**
+ * 给密码打 0–4 分，**只用于画强度条**（体验），不参与准入判定。
+ * 准入由 validatePasswordForm / 后端 validatePasswordStrength 决定。
+ *
+ * 分级语义：
+ *   0 = 还没输入（不点亮任何一格，也不显示「弱」以免误导）
+ *   1 = 已经输入但不达标或很弱
+ *   2~4 = 依次更强
+ */
+function scorePassword(pwd) {
+  if (!pwd) return 0;
+
+  const len = [...pwd].length;
+  const kinds = countKinds(pwd);
+
+  let score = 0;
+  if (len >= PWD_MIN) score++;
+  if (len >= 12) score++;
+  if (kinds >= 2) score++;
+  if (kinds >= 3) score++;
+
+  // 有规律 → 最多「一般」，再多字符类别也不该显示成强
+  if (OBVIOUS_PATTERN.test(pwd)) score = Math.min(score, 2);
+
+  // 只要输入了内容就至少点亮 1 格 —— 用户敲了密码却毫无反馈是最糟的体验
+  return Math.max(1, Math.min(4, score));
+}
+
+/**
+ * 改密码表单校验。
+ * 只产出 oldPassword / newPassword —— 「确认新密码」纯粹是防输错的前端护具，
+ * 不需要也不应该发给后端（后端收到两份同样的值没有意义，反而多一个可被绕过的字段）。
+ * @returns {{ ok: boolean, errors: Record<string,string>, value?: object }}
+ */
+function validatePasswordForm() {
+  const errors = {};
+  const oldPassword = $('#pwd-old').value;
+  const newPassword = $('#pwd-new').value;
+  const confirm = $('#pwd-confirm').value;
+
+  if (!oldPassword) errors.old = '请输入当前密码';
+
+  if (!newPassword) {
+    errors.new = '请输入新密码';
+  } else {
+    const len = [...newPassword].length;
+    if (len < PWD_MIN) errors.new = '新密码至少 ' + PWD_MIN + ' 位';
+    else if (len > PWD_MAX) errors.new = '新密码不能超过 ' + PWD_MAX + ' 位';
+    else if (/^\s|\s$/.test(newPassword)) errors.new = '新密码的首尾不能是空格';
+    else if (countKinds(newPassword) < 2) {
+      errors.new = '新密码需包含大写字母、小写字母、数字、符号中的至少两类';
+    }
+  }
+
+  if (!confirm) errors.confirm = '请再输入一次新密码';
+  else if (confirm !== newPassword) errors.confirm = '两次输入的新密码不一致';
+
+  // 新旧相同：优先级排在「格式不合法」之后，避免两条错误同时糊在屏幕上
+  if (!errors.old && !errors.new && newPassword === oldPassword) {
+    errors.new = '新密码不能与当前密码相同';
+  }
+
+  const ok = Object.keys(errors).length === 0;
+  return {
+    ok: ok,
+    errors: errors,
+    value: ok ? { oldPassword: oldPassword, newPassword: newPassword } : null
+  };
+}
+
+/** 把错误写到对应字段下方；同时切换 aria-invalid 供样式与读屏使用 */
+function paintPwdErrors(errors) {
+  PWD_FIELDS.forEach(function (f) {
+    const box = $('#err-pwd-' + f);
+    const input = $('#pwd-' + f);
+    if (box) box.textContent = errors[f] || '';
+    if (input) {
+      if (errors[f]) input.setAttribute('aria-invalid', 'true');
+      else input.removeAttribute('aria-invalid');
+    }
+  });
+}
+
+function focusFirstPwdError(errors) {
+  for (let i = 0; i < PWD_FIELDS.length; i++) {
+    const f = PWD_FIELDS[i];
+    if (!errors[f]) continue;
+    const input = $('#pwd-' + f);
+    if (input) { input.focus(); if (input.select) input.select(); }
+    return;
+  }
+}
+
+/** 刷新强度条与文案 */
+function updatePwdMeter() {
+  const level = scorePassword($('#pwd-new').value);
+  $('#pwd-meter').setAttribute('data-level', String(level));
+  const text = $('#pwd-strength');
+  text.textContent = STRENGTH_LABEL[level] || STRENGTH_LABEL[0];
+  text.className = 'field-hint' + (level > 0 ? ' pw-strength-' + level : '');
 }
 
 /* ==========================================================================
@@ -581,6 +721,7 @@ async function loadItems(silent) {
 
 const editModal = $('#edit-modal');
 const delModal = $('#del-modal');
+const pwdModal = $('#pwd-modal');
 
 function openEdit(item) {
   state.editing = item ? item.id : null;
@@ -623,6 +764,54 @@ function closeDelete() {
   delModal.hidden = true;
   document.body.style.overflow = '';
   state.deleting = null;
+}
+
+/* ---------- 修改密码 ---------- */
+
+function openPassword() {
+  $('#pwd-old').value = '';
+  $('#pwd-new').value = '';
+  $('#pwd-confirm').value = '';
+
+  // 每次打开都把「显示密码」复位为隐藏，避免上次的状态带到这次会话
+  $$('.pw-toggle').forEach(function (btn) { setPwVisible(btn, false); });
+
+  paintPwdErrors({});
+  updatePwdMeter();
+
+  pwdModal.hidden = false;
+  document.body.style.overflow = 'hidden';
+  window.setTimeout(function () { $('#pwd-old').focus(); }, 60);
+}
+
+function closePassword() {
+  pwdModal.hidden = true;
+  document.body.style.overflow = '';
+  // 关闭即清空：不让密码以明文形式留在 DOM 里
+  $('#pwd-old').value = '';
+  $('#pwd-new').value = '';
+  $('#pwd-confirm').value = '';
+}
+
+/** 切换某个密码框的明文/掩码显示 */
+function setPwVisible(btn, visible) {
+  const input = $('#' + btn.getAttribute('data-toggle'));
+  if (!input) return;
+  input.type = visible ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', visible ? 'true' : 'false');
+}
+
+/** 提交中禁用按钮，防止连点造成重复请求（服务端还有 15 秒冷却兜底） */
+function setPwdSaving(flag) {
+  const btn = $('#pwd-save');
+  btn.disabled = flag;
+  btn.innerHTML = '';
+  if (flag) {
+    btn.appendChild(el('span', { class: 'spinner' }));
+    btn.appendChild(document.createTextNode(' 提交中…'));
+  } else {
+    btn.appendChild(document.createTextNode('确认修改'));
+  }
 }
 
 /** 保存中禁用按钮，防止重复提交产生两条数据 */
@@ -865,13 +1054,70 @@ $('#del-confirm').addEventListener('click', async function () {
   await loadItems(true);
 });
 
-/* ---------- 模态框：点遮罩关闭 / ESC 关闭 ---------- */
-[editModal, delModal].forEach(function (modal) {
-  modal.addEventListener('mousedown', function (e) {
-    if (e.target === modal) {
-      if (modal === editModal) closeEdit();
-      else closeDelete();
+/* ---------- 修改密码 ---------- */
+$('#pwd-btn').addEventListener('click', openPassword);
+$('#pwd-close').addEventListener('click', closePassword);
+$('#pwd-cancel').addEventListener('click', closePassword);
+
+/* 显示 / 隐藏密码 */
+$$('.pw-toggle').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    setPwVisible(btn, btn.getAttribute('aria-pressed') !== 'true');
+  });
+});
+
+/* 输入时清掉该字段的错误提示，并实时刷新强度条 */
+PWD_FIELDS.forEach(function (f) {
+  $('#pwd-' + f).addEventListener('input', function () {
+    const box = $('#err-pwd-' + f);
+    if (box && box.textContent) {
+      box.textContent = '';
+      this.removeAttribute('aria-invalid');
     }
+    if (f === 'new') updatePwdMeter();
+  });
+});
+
+$('#pwd-form').addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const result = validatePasswordForm();
+  paintPwdErrors(result.errors);
+
+  if (!result.ok) {
+    toast('请先修正表单中的问题', 'error');
+    focusFirstPwdError(result.errors);
+    return;
+  }
+
+  setPwdSaving(true);
+  const res = await api(API.password, { method: 'POST', body: result.value });
+  setPwdSaving(false);
+
+  if (!res.ok) {
+    // 后端带回 field 就精确落到对应输入框（oldPassword / newPassword）
+    if (res.error.field === 'oldPassword') paintPwdErrors({ old: res.error.message });
+    else if (res.error.field === 'newPassword') paintPwdErrors({ new: res.error.message });
+    toast(res.error.message || '修改失败，请稍后重试', 'error');
+    return;
+  }
+
+  // 服务端已轮换世代 → 包括当前这条在内的所有会话都已失效。
+  // 本地同步登出，回到登录页强制重新认证。
+  closePassword();
+  clearToken();
+  state.items = [];
+  showLogin();
+  toast('密码已修改，请用新密码重新登录', 'success');
+});
+
+/* ---------- 模态框：点遮罩关闭 / ESC 关闭 ---------- */
+[editModal, delModal, pwdModal].forEach(function (modal) {
+  modal.addEventListener('mousedown', function (e) {
+    if (e.target !== modal) return;
+    if (modal === editModal) closeEdit();
+    else if (modal === delModal) closeDelete();
+    else closePassword();
   });
 });
 
@@ -879,6 +1125,7 @@ document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
   if (!delModal.hidden) closeDelete();
   else if (!editModal.hidden) closeEdit();
+  else if (!pwdModal.hidden) closePassword();
 });
 
 /* ==========================================================================

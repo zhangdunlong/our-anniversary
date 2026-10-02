@@ -264,6 +264,15 @@ if (fs.existsSync(wranglerPath) && fs.existsSync(workerPath)) {
   let bm;
   while ((bm = bindRe.exec(wConf))) bindings.push(bm[1]);
 
+  // [vars] 里的键同样是合法的 env.* 来源（纯文本变量）。
+  // 不收集的话，PBKDF2_ITERATIONS 这类配置会被误判成「未绑定的 env 变量」。
+  const varsBlock = wConf.match(/^\[vars\]([\s\S]*?)(?=^\[|(?![\s\S]))/m);
+  if (varsBlock) {
+    const varRe = /^[ \t]*([A-Z_][A-Z0-9_]*)[ \t]*=/gm;
+    let vm;
+    while ((vm = varRe.exec(varsBlock[1]))) bindings.push(vm[1]);
+  }
+
   const used = new Set();
   const useRe = /\benv\.([A-Z_][A-Z0-9_]*)/g;
   let um;
@@ -272,12 +281,68 @@ if (fs.existsSync(wranglerPath) && fs.existsSync(workerPath)) {
   const unbound = [...used].filter((n) => n !== 'ASSETS' && bindings.indexOf(n) === -1);
   if (unbound.length) {
     fail('_worker.js 使用了未绑定的 env 变量：' + unbound.join(', ') +
-         '（wrangler.toml 中已有的 binding：' + (bindings.join(', ') || '无') + '）');
+         '（wrangler.toml 中已有的 binding / vars：' + (bindings.join(', ') || '无') + '）');
   } else {
     ok('KV 绑定与 Worker 用法一致（' + (bindings.join(', ') || '无绑定') + '）');
   }
 } else if (!fs.existsSync(wranglerPath)) {
   warn('未找到 wrangler.toml，KV 需在 Cloudflare Dashboard 手动绑定');
+}
+
+// 后台 JS 引用的元素 id 必须存在于后台 HTML —— 与前台那套检查同理：
+// id 拼错不会报任何错，只会让某个按钮「点了没反应」。
+const adminJsPath = path.join(ROOT, 'public', 'admin', 'admin.js');
+if (fs.existsSync(adminHtmlPath) && fs.existsSync(adminJsPath)) {
+  const adminHtmlTxt = fs.readFileSync(adminHtmlPath, 'utf8');
+  const adminJsTxt = fs.readFileSync(adminJsPath, 'utf8');
+
+  const adminIds = new Set();
+  const aIdRe = /\sid="([^"]+)"/g;
+  let ai;
+  while ((ai = aIdRe.exec(adminHtmlTxt))) adminIds.add(ai[1]);
+
+  // 只认单引号字符串字面量里的 '#id'，且 id 必须以字母数字结尾 ——
+  // 这样 '$("#pwd-" + f)' 这类拼接不会被当成 id（否则会误报 "pwd-"）。
+  const adminRefs = new Map();
+  const refRe = /(?:\$|\$\$)\s*\(\s*'#([A-Za-z][\w-]*[A-Za-z0-9]|[A-Za-z])'/g;
+  let ri;
+  while ((ri = refRe.exec(adminJsTxt))) {
+    if (!adminRefs.has(ri[1])) adminRefs.set(ri[1], true);
+  }
+
+  const badIds = [...adminRefs.keys()].filter((id) => !adminIds.has(id));
+  if (badIds.length) {
+    fail('admin.js 引用了后台 HTML 中不存在的 id：' + badIds.join(', '));
+  } else {
+    ok('后台 JS 的 ' + adminRefs.size + ' 个 id 引用均能在 admin/index.html 中找到');
+  }
+}
+
+// 密码规则在前端 / 后端 / 初始化脚本里各写了一份，必须保持一致，
+// 否则会出现「前台放行、后端拒绝」这种最难排查的体验问题。
+const pwdRuleTargets = [
+  { file: path.join(ROOT, 'public', '_worker.js'), label: '_worker.js' },
+  { file: path.join(ROOT, 'public', 'admin', 'admin.js'), label: 'admin.js' },
+  { file: path.join(ROOT, 'scripts', 'init-admin.mjs'), label: 'init-admin.mjs' }
+];
+const pwdMins = [];
+const pwdMaxes = [];
+for (const t of pwdRuleTargets) {
+  if (!fs.existsSync(t.file)) continue;
+  const code = fs.readFileSync(t.file, 'utf8');
+  const mn = code.match(/const PWD_MIN\s*=\s*(\d+)/);
+  const mx = code.match(/const PWD_MAX\s*=\s*(\d+)/);
+  if (mn) pwdMins.push(t.label + '=' + mn[1]);
+  if (mx) pwdMaxes.push(t.label + '=' + mx[1]);
+}
+if (pwdMins.length >= 2) {
+  const mins = new Set(pwdMins.map((s) => s.split('=')[1]));
+  const maxes = new Set(pwdMaxes.map((s) => s.split('=')[1]));
+  if (mins.size > 1 || maxes.size > 1) {
+    fail('密码长度规则不一致：' + pwdMins.concat(pwdMaxes).join('  '));
+  } else {
+    ok('密码长度规则前后端一致（PWD_MIN=' + [...mins][0] + ', PWD_MAX=' + [...maxes][0] + '）');
+  }
 }
 
 /* ---------------------------------------------------------------- ⑤ 符号绑定 */
